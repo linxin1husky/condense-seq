@@ -1,41 +1,11 @@
-import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
-import math
-import copy
+import sys, subprocess, re
+import argparse
 import gzip
+import Helper_Py3
 
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
-
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rb')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
-
-def rev_cmp (seq):
-    dic={'A':'T', 'T':'A', 'C':'G', 'G':'C', 'N':'N'}
-    output=''
-    for nt in seq:
-        output+=dic[nt]
-    return output[::-1]
+"""
+Step 1 of condense-seq pipeline after bowtie2 alignment.
+"""
 
 def NCP_count (fnames,
                genome_size,
@@ -60,9 +30,11 @@ def NCP_count (fnames,
         name = label[i]
         #chr_cov = out_cov[i]
         filename = data[i]
-        print >> sys.stderr, "reading %s" % (filename)
-        samtools_cmd = ["samtools",  "view", "-F 0x10", filename]
-        samtools_proc = subprocess.Popen(samtools_cmd, stdout=subprocess.PIPE, stderr=open("/dev/null", 'w'))
+        print("reading %s" % (filename), file=sys.stderr)
+        samtools_proc = subprocess.Popen(["samtools",  "view", "-F 0x10", filename], 
+                                         stdout=subprocess.PIPE, 
+                                         stderr=subprocess.DEVNULL,
+                                         text=True)
 
         for line in samtools_proc.stdout:
             # skip the header
@@ -129,7 +101,7 @@ def NCP_count (fnames,
                 end_pos = pos + tlen
             else: # right read
                 end_pos = pos
-                cigar_str=re.split('(\d+)',cigar_str)[1:]
+                cigar_str=re.split(r'(\d+)',cigar_str)[1:]
                 for i in range(len(cigar_str)/2):
                     s = cigar_str[2*i+1]
                     num = int(cigar_str[2*i])
@@ -152,24 +124,23 @@ def NCP_count (fnames,
             chr_profile[ref_id][end_pos][name] -= 1
             
     # summarize the output
-    print >> sys.stderr, "writing coverage file"
+    print("writing coverage file", file=sys.stderr)
     
-    f = gzip.open(out_fname + '_cov.gtab.gz', 'wb')
+    f = gzip.open(out_fname + '_cov.gtab.gz', 'wt', encoding='utf-8', newline='\n')
     s = 'Chromosome\tPosition'
     for i in range(len(label)):
         s += '\t' + label[i]
-    print >> f, s
+    print(s, file=f)
 
-    #ID = 0
-    for chr in sorted(chr_profile.keys(), cmp=chr_cmp):
+    for chr in sorted(chr_profile.keys(), key=Helper_Py3.chr_key):
         previous = [0]*len(label)
         if skip_zero:
-            start = min(chr_profile[chr])
+            # start = min(chr_profile[chr])
             end = max(chr_profile[chr]) + 1
         else:
-            start = 0
+            # start = 0
             end = genome_size[chr]
-        for i in xrange(start, end):
+        for i in range(end):
             #s = str(ID) + "\t" + chr + "\t" + str(i)
             s = chr + "\t" + str(i)
             for j in range(len(label)):
@@ -183,11 +154,10 @@ def NCP_count (fnames,
                 previous[j] = current
             if skip_zero and sum(previous) == 0:
                 continue
-            print >> f, s
-            #ID += 1
+            print(s, file=f)
         
     f.close()
-    print >> sys.stderr, "Done"
+    print("Done", file=sys.stderr)
         
 
 if __name__ == '__main__':
@@ -199,16 +169,19 @@ if __name__ == '__main__':
         else:
             raise argparse.ArgumentTypeError('Boolean value expected.')
 
-    parser = ArgumentParser(description='Calculate coverage along the genome')
-    parser.add_argument(metavar='-f',
+    parser = argparse.ArgumentParser(
+        description='Calculate coverage along the genome',
+        epilog="""Example of usage: python3 condense-seq/prepro_scripts/coverage_ver3.py 
+        -f <input BAM 1> <input BAM 2> <input BAM 3> -x <Reference genome in FASTA> --chr chr1 --skip -o <Output path prefix>""")
+    parser.add_argument('-f',
                         dest="fnames",
                         type=str,
                         nargs='+',
                         help='SAM/Bam filenames')
-    parser.add_argument(metavar='-x',
+    parser.add_argument('-x',
                         dest='ref_fname',
                         type=str,
-                        help='reference sequence filename')
+                        help='reference FASTA sequence filename')
     parser.add_argument('-m',
                         dest="mm_cutoff",
                         type=int,
@@ -225,7 +198,7 @@ if __name__ == '__main__':
                         dest="max_len",
                         type=int,
                         nargs='?',
-                        default=sys.maxint,
+                        default=sys.maxsize,
                         const=170,
                         help='maximum length for selection in bp')
     parser.add_argument('--skip',
@@ -251,10 +224,10 @@ if __name__ == '__main__':
     # get length for each chromosome
     genome_size = {}
     if not args.ref_fname:
-        print >> sys.stderr, "Error: there is no reference file input."
+        print("Error: there is no reference file input.", file=sys.stderr)
         sys.exit(1)
         
-    for line in gzopen(args.ref_fname):
+    for line in Helper_Py3.gzopen(args.ref_fname):
         line = line.strip()
         if line.startswith('>'):
             key = line.split()[0][1:]
@@ -265,11 +238,9 @@ if __name__ == '__main__':
 
     chr_list = []
     if not args.chr_list:
-        chr_list = sorted(genome_size.keys(), cmp=chr_cmp)
+        chr_list = sorted(genome_size.keys(), key=Helper_Py3.chr_key)
     else:
-        chr_list = sorted(args.chr_list, cmp=chr_cmp)
-
-    #print chr_list
+        chr_list = sorted(args.chr_list, key=Helper_Py3.chr_key)
 
     NCP_count (args.fnames,
                genome_size,

@@ -1,41 +1,8 @@
-import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
-import math
-import copy
+import sys, subprocess, re
+import argparse
+import math, copy
 import gzip
-
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
-
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rb')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
-
-def rev_cmp (seq):
-    dic={'A':'T', 'T':'A', 'C':'G', 'G':'C', 'N':'N'}
-    output=''
-    for nt in seq:
-        output+=dic[nt]
-    return output[::-1]
+import Helper_Py3
 
 def bin_count (fnames,
                genome_size,
@@ -71,9 +38,11 @@ def bin_count (fnames,
     for k in range(len(data)):
         g_count = out[k]      
         filename = data[k]
-        print >> sys.stderr, "reading %s" % (filename)
-        samtools_cmd = ["samtools",  "view", "-F 0x10", filename]
-        samtools_proc = subprocess.Popen(samtools_cmd, stdout=subprocess.PIPE, stderr=open("/dev/null", 'w'))
+        print("reading %s" % (filename), file=sys.stderr)
+        samtools_proc = subprocess.Popen(["samtools",  "view", "-F 0x10", filename], 
+                                         stdout=subprocess.PIPE, 
+                                         stderr=subprocess.DEVNULL,
+                                         text=True)
         for line in samtools_proc.stdout:
             if line.startswith('@'):
                 continue
@@ -143,7 +112,7 @@ def bin_count (fnames,
                     NCPscore = [[pos+tlen/2-1, 1]] # don't worry about even tlen case
             else: # right read
                 end_pos = pos
-                cigar_str=re.split('(\d+)',cigar_str)[1:]
+                cigar_str=re.split(r'(\d+)',cigar_str)[1:]
                 for i in range(len(cigar_str)/2):
                     s = cigar_str[2*i+1]
                     num = int(cigar_str[2*i])
@@ -159,7 +128,7 @@ def bin_count (fnames,
 
             # collect valid data
             for NCPpos, score in NCPscore:
-                index = int(NCPpos) / int(win_size)
+                index = int(NCPpos) // int(win_size)
                 g_count[ref_id][index] += score
 
                 # record tlen for control
@@ -167,9 +136,9 @@ def bin_count (fnames,
                     g_tlen[ref_id][index] += abs(tlen)
 
     # summarize the output
-    print >> sys.stderr, "writing bin file"
+    print("writing bin file", file=sys.stderr)
 
-    f = gzip.open(out_fname + '_bin.gtab.gz', 'wb')
+    f = gzip.open(out_fname + '_bin.gtab.gz', 'wt', encoding='utf-8', newline='\n')
     #s = 'Chromosome\tPosition'
     #s = 'Chromosome\tStart\tEnd'
     s = 'Chromosome\tStart\tEnd'
@@ -179,11 +148,11 @@ def bin_count (fnames,
         s += '\t' + 'GCcontent'
     if tlen_option:
         s += '\t' + 'Meantlen'
-    print >> f, s
+    print(s, file=f)
         
 
     #ID = 0
-    for chr in sorted(g_count.keys(), cmp=chr_cmp):
+    for chr in sorted(g_count.keys(), key=Helper_Py3.chr_key):
         for i in range(len(g_count[chr])):
             #Binpos = i + win_size/2
             #s = str(ID) + "\t" + chr + "\t" + str(Binpos)
@@ -206,11 +175,11 @@ def bin_count (fnames,
                     mean_tlen = 0
                 s += '\t%f' % (mean_tlen)
             #ID += 1
-            print >> f, s
+            print(s, file=f)
 
     f.close()
 
-    print >> sys.stderr, "Done"
+    print("Done", file=sys.stderr)
     
 
 if __name__ == '__main__':
@@ -222,13 +191,14 @@ if __name__ == '__main__':
         else:
             raise argparse.ArgumentTypeError('Boolean value expected.')
 
-    parser = ArgumentParser(description='Divide the genome into bins and counts the read number')
-    parser.add_argument(metavar='-f',
+    parser = argparse.ArgumentParser(description='Divide the genome into bins and counts the read number',
+                                     epilog="Notes from Xin: if testing on local environment, make sure to activate the 'condense-seq' environment.")
+    parser.add_argument('-f',
                         dest="fnames",
                         type=str,
                         nargs='+',
                         help='SAM/Bam filenames')
-    parser.add_argument(metavar='-x',
+    parser.add_argument('-x',
                         dest='ref_fname',
                         type=str,
                         help='reference sequence filename')
@@ -250,7 +220,7 @@ if __name__ == '__main__':
     parser.add_argument('--max',
                         dest="max_len",
                         type=int,
-                        default=sys.maxint,
+                        default=sys.maxsize, # sys.maxint is python 2 annotation, not python 3 annotation.
                         help='maximum length for selection in bp')
     parser.add_argument('--chr',
                         dest="chr_list",
@@ -290,10 +260,10 @@ if __name__ == '__main__':
     genome_size = {}
 
     if not args.ref_fname:
-        print >> sys.stderr, "Error: there is no reference file input."
+        print("Error: there is no reference file input.", file=sys.stderr)
         sys.exit(1)
 
-    for line in gzopen(args.ref_fname):
+    for line in Helper_Py3.gzopen(args.ref_fname):
         line = line.strip()
         if line.startswith('>'):
             key = line.split()[0][1:]
@@ -320,7 +290,7 @@ if __name__ == '__main__':
     bin_GC = None
     if args.GC_option:
         bin_GC = {}
-        for line in gzopen(args.ref_fname):
+        for line in Helper_Py3.gzopen(args.ref_fname):
             line = line.strip()
             if line.startswith(">"):
                 if len(bin_GC) > 0 and len(seq) > 0:
@@ -343,9 +313,9 @@ if __name__ == '__main__':
     
     chr_list = []
     if not args.chr_list:
-        chr_list = sorted(genome_size.keys(), cmp=chr_cmp)
+        chr_list = sorted(genome_size.keys(), key=Helper_Py3.chr_key)
     else:
-        chr_list = sorted(args.chr_list, cmp=chr_cmp)
+        chr_list = sorted(args.chr_list, key=Helper_Py3.chr_key)
 
     #print chr_list
 
