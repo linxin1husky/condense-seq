@@ -1,15 +1,6 @@
-import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
-import math
-import copy
-import time
-
-def rev_cmp (seq):
-    dic={'A':'T', 'T':'A', 'C':'G', 'G':'C', 'N':'N'}
-    output=''
-    for nt in seq:
-        output+=dic[nt]
-    return output[::-1]
+import sys, subprocess
+import argparse 
+import Helper_Py3
 
 def NCP_count (fnames,
                mm_cutoff,
@@ -29,9 +20,15 @@ def NCP_count (fnames,
     for i in range(len(data)):
         name = label[i]
         filename = data[i]
-        print >> sys.stderr, "reading %s" % (filename)
-        samtools_cmd = ["samtools",  "view", "-F 0x10", filename]
-        samtools_proc = subprocess.Popen(samtools_cmd, stdout=subprocess.PIPE, stderr=open("/dev/null", 'w'))
+        print("reading %s" % (filename), file=sys.stderr) 
+
+        samtools_proc = subprocess.Popen(
+            f"samtools view -F 0x10 {filename}",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,           # <-- this makes lines str, not bytes
+            shell=True
+        )
 
         chr_rlen = {}
         for line in samtools_proc.stdout:
@@ -95,7 +92,7 @@ def NCP_count (fnames,
         output_list.append(chr_rlen)
 
     # summarize the output
-    print >> sys.stderr, "writing rlen file"
+    print("writing rlen file", file=sys.stderr)
 
     for i in range(len(output_list)):
         chr_rlen = output_list[i]
@@ -103,30 +100,22 @@ def NCP_count (fnames,
         
         f = open(out_fname + '_' + name + '_rlen.txt', 'w')
         s = 'Chromosome\tReadLength\tCounts'
-        print >> f, s
+        print(s, file=f)
 
         for chr in sorted(chr_rlen.keys()):
             for rlen in sorted(chr_rlen[chr].keys()):
                 count = chr_rlen[chr][rlen]
                 s = chr + "\t" + str(rlen) + "\t" + str(count)
-                print >> f, s
+                print(s, file=f)
 
         f.close()
 
-    print >> sys.stderr, "Done"
+    print("Done", file=sys.stderr)
     
 
 if __name__ == '__main__':
-    def str2bool(v):
-        if v.lower() in ('yes', 'true', 't', 'y', '1'):
-            return True
-        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-            return False
-        else:
-            raise argparse.ArgumentTypeError('Boolean value expected.')
-
-    parser = ArgumentParser(description='Get read length distribution')
-    parser.add_argument(metavar='-f1',
+    parser = argparse.ArgumentParser(description='Get read length distribution')
+    parser.add_argument('-f1',
                         dest="fnames",
                         type=str,
                         nargs='+',
