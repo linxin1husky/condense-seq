@@ -1,0 +1,44 @@
+# =========================================
+# General/Universal Ignore Rules
+# =========================================
+
+# Ignore OS-generated temporary files
+.DS_Store             # macOS
+Thumbs.db             # Windows
+ehthumbs.db           # Windows
+Desktop.ini           # Windows
+
+# Ignore common build/dependency directories
+/node_modules         # Node.js dependencies
+/build                # Common build output directory
+/dist                 # Common distribution output directory
+/temp                 # Temporary files directory
+
+# Ignore common temporary/log files
+*.log
+*.temp
+*.tmp
+*.cache
+__pycache__           # Python cache files
+
+# Ignore sensitive files (credentials/environment variables)
+.env                  # Common environment variable file
+.env.local
+config.local.json
+credentials.json
+
+# Ignore IDE/Editor specific files (adjust as needed)
+.vscode/              # VS Code settings directory
+.idea/                # JetBrains IDEs (IntelliJ, PyCharm, etc.)
+*.suo                   # Visual Studio Solution User Options
+*.user                  # Visual Studio
+
+# Ignore compiled/binary files (if applicable to your project type)
+*.o
+*.obj
+*.exe
+*.dll
+*.class
+
+# Add more repository specific to ignore
+*/__pycache__

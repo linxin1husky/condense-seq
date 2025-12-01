@@ -1,34 +1,7 @@
-import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
-import math
-import copy
+import sys, subprocess, re
+import argparse
 import gzip
-
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
-
-def rev_cmp (seq):
-    dic={'A':'T', 'T':'A', 'C':'G', 'G':'C', 'N':'N'}
-    output=''
-    for nt in seq:
-        output+=dic[nt]
-    return output[::-1]
+import Helper_Py3
 
 def NCP_peak (fnames,
               min_len,
@@ -54,10 +27,11 @@ def NCP_peak (fnames,
         name = label[i]
         #chr_cov = out_cov[i]
         filename = data[i]
-        print >> sys.stderr, "reading %s" % (filename)
-        #print "reading %s" % (filename)
-        samtools_cmd = ["samtools",  "view", "-F 0x10", filename]
-        samtools_proc = subprocess.Popen(samtools_cmd, stdout=subprocess.PIPE, stderr=open("/dev/null", 'w'))
+        print("reading %s" % (filename), file=sys.stderr)
+        samtools_proc = subprocess.Popen(["samtools",  "view", "-F 0x10", filename], 
+                                         stdout=subprocess.PIPE, 
+                                         stderr=subprocess.DEVNULL,
+                                         text=True)
 
         for line in samtools_proc.stdout:
             # skip the header
@@ -123,22 +97,22 @@ def NCP_peak (fnames,
             if tlen > 0: # left read
                 end_pos = pos + tlen
                 if tlen % 2 != 0:
-                    NCPscore = [[pos+tlen/2, 1]]
+                    NCPscore = [[pos+tlen // 2, 1]]
                 else:
-                    NCPscore = [[pos+tlen/2-1, 0.5], [pos+tlen/2, 0.5]]
+                    NCPscore = [[pos+tlen // 2 - 1, 0.5], [pos+tlen // 2, 0.5]]
             else: # right read
                 end_pos = pos
-                cigar_str=re.split('(\d+)',cigar_str)[1:]
-                for i in range(len(cigar_str)/2):
+                cigar_str=re.split(r'(\d+)',cigar_str)[1:]
+                for i in range(len(cigar_str) // 2):
                     s = cigar_str[2*i+1]
                     num = int(cigar_str[2*i])
                     if s == 'M' or s == 'D':
                         end_pos += num
                 pos = end_pos + tlen
                 if tlen % 2 != 0:
-                    NCPscore = [[end_pos+tlen/2-1, 1]]
+                    NCPscore = [[end_pos+tlen // 2 - 1, 1]]
                 else:
-                    NCPscore = [[end_pos+tlen/2-1, 0.5], [end_pos+tlen/2, 0.5]]
+                    NCPscore = [[end_pos+tlen // 2 - 1, 0.5], [end_pos+tlen // 2, 0.5]]
             
             # record NCP position
             for NCPpos, score in NCPscore:
@@ -178,18 +152,13 @@ def NCP_peak (fnames,
     """
     
     # select NCP positions with highest score and minimized overlapping    
-    print >> sys.stderr, "peak calling: filtering NCP positions"
-    #print "filtering NCP positions"
-    def tuple_cmp (a,b):
-        if a[0] <= b[0]:
-            return -1
-        else:
-            return 1
+    print("peak calling: filtering NCP positions", file=sys.stderr)
+        
     # find the index where the target would be inserted in right order
     def binary_insert (sortlist, target):
         st, ed = 0, len(sortlist)-1
         while st <= ed:
-            mid = (st+ed) / 2
+            mid = (st+ed) // 2      # Classic python2 to 3 change: where "/" does true divsion, returning float.
             if sortlist[mid] == target:
                 return mid
             elif sortlist[mid] > target:
@@ -199,7 +168,7 @@ def NCP_peak (fnames,
         return st
 
     chr_peak = {}
-    for chr in sorted(chr_NCP.keys(), cmp=chr_cmp):
+    for chr in sorted(chr_NCP.keys(), key=Helper_Py3.chr_key):
         name_temp = {}
         for NCPpos in sorted(chr_NCP[chr].keys()):
             for name in label:
@@ -212,7 +181,7 @@ def NCP_peak (fnames,
                     continue
         for name in name_temp:
             selected = []
-            temp = sorted(name_temp[name], cmp=tuple_cmp, reverse=True)
+            temp = sorted(name_temp[name], key=lambda x: x[0], reverse=True)
             for k in range(len(temp)):
                 score, NCPpos = temp[k]
                 idx = binary_insert (selected, NCPpos)
@@ -233,17 +202,16 @@ def NCP_peak (fnames,
 
 
     # summarize the output
-    print >> sys.stderr, "writing NPS file"
-    #print "writing NPS file"
+    print("writing NPS file", file=sys.stderr)
     
-    f = gzip.open(out_fname + '_NPS.gtab.gz', 'wb')
+    f = gzip.open(out_fname + '_NPS.gtab.gz', 'wt', encoding='utf-8', newline='\n')
     s = 'Chromosome\tPosition'
     for i in range(len(label)):
         s += '\t' + label[i]
-    print >> f, s
+    print(s, file=f)
 
     #ID = 0
-    for chr in sorted(chr_NCP.keys(), cmp=chr_cmp):
+    for chr in sorted(chr_NCP.keys(), key=Helper_Py3.chr_key):
         for NCPpos in sorted(chr_NCP[chr].keys()):
             #s = str(ID) + "\t" + chr + "\t" + str(NCPpos)
             s = chr + "\t" + str(NCPpos)
@@ -253,23 +221,22 @@ def NCP_peak (fnames,
                 except:
                     score = 0
                 s += "\t" + str(score)
-            print >> f, s
+            print(s, file=f)
             #ID += 1
         
     f.close()
 
     
-    print >> sys.stderr, "writing peak file"
-    #print "writing peak file"
+    print("writing peak file", file=sys.stderr)
     
-    f = gzip.open(out_fname + '_peak.gtab.gz', 'wb')
+    f = gzip.open(out_fname + '_peak.gtab.gz', 'wt', encoding='utf-8', newline='\n')
     s = 'Chromosome\tPosition'
     for i in range(len(label)):
         s += '\t' + label[i]
-    print >> f, s
+    print(s, file=f)
 
     #ID = 0
-    for chr in sorted(chr_peak.keys(), cmp=chr_cmp):
+    for chr in sorted(chr_peak.keys(), key=Helper_Py3.chr_key):
         for NCPpos in sorted(chr_peak[chr].keys()):
             #s = str(ID) + "\t" + chr + "\t" + str(NCPpos)
             s = chr + "\t" + str(NCPpos)
@@ -279,12 +246,12 @@ def NCP_peak (fnames,
                 except:
                     score = 0
                 s += "\t" + str(score)
-            print >> f, s
+            print(s, file=f)
             #ID += 1
 
     f.close()
 
-    print >> sys.stderr, "Done"
+    print("Done", file=sys.stderr)
     
 
 if __name__ == '__main__':
@@ -296,8 +263,8 @@ if __name__ == '__main__':
         else:
             raise argparse.ArgumentTypeError('Boolean value expected.')
 
-    parser = ArgumentParser(description='Calling NCP peaks and scores')
-    parser.add_argument(metavar='-f',
+    parser = argparse.ArgumentParser(description='Calling NCP peaks and scores')
+    parser.add_argument('-f',
                         dest="fnames",
                         type=str,
                         nargs='+',
@@ -351,7 +318,7 @@ if __name__ == '__main__':
     if not args.chr_list:
         chr_list = None
     else:
-        chr_list = sorted(args.chr_list, cmp=chr_cmp)
+        chr_list = sorted(args.chr_list, key=Helper_Py3.chr_key)
 
     NCP_peak (args.fnames,
               args.min_len,

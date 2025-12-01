@@ -1,41 +1,6 @@
-import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
-import math
-import copy
-import gzip
+import sys, argparse, math, gzip
+import Helper_Py3
 
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
-
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rb')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
-
-def rev_cmp (seq):
-    dic={'A':'T', 'T':'A', 'C':'G', 'G':'C', 'N':'N'}
-    output=''
-    for nt in seq:
-        output+=dic[nt]
-    return output[::-1]
 
 def NCP_count (peak_fname,
                cov_fname,
@@ -45,11 +10,11 @@ def NCP_count (peak_fname,
                out_fname):
 
     # read peak file
-    print >> sys.stderr, "reading peak file"
+    print("reading peak file", file=sys.stderr)
     chr_peak = {}
     First = True
     
-    for line in gzopen(peak_fname):
+    for line in Helper_Py3.gzopen(peak_fname):
         cols = line.strip().split()
         if First:
             label = cols[2:]
@@ -79,7 +44,7 @@ def NCP_count (peak_fname,
         target = label # target all peaks
         
     chr_st, chr_ed = {}, {}
-    for chr in sorted(chr_peak.keys(), cmp=chr_cmp):
+    for chr in sorted(chr_peak.keys(), key=Helper_Py3.chr_key):
         for NCPpos in sorted(chr_peak[chr].keys()):
             for name in target:
                 try:
@@ -87,8 +52,8 @@ def NCP_count (peak_fname,
                     if chr not in chr_st:
                         chr_st[chr] = []
                         chr_ed[chr] = []
-                    st = NCPpos - NCP_len/2
-                    ed = NCPpos + NCP_len/2
+                    st = NCPpos - NCP_len // 2
+                    ed = NCPpos + NCP_len // 2
                     if st not in chr_st:
                         chr_st[chr].append(st)
                         chr_ed[chr].append(ed)
@@ -96,7 +61,7 @@ def NCP_count (peak_fname,
                     continue           
 
     # reading coverage file and get NCP coverage
-    print >> sys.stderr, "reading coverage file"
+    print("reading coverage file", file=sys.stderr)
     chr_Ncov = {}
     NCPcovs = []
     
@@ -104,7 +69,7 @@ def NCP_count (peak_fname,
     order = None
     prev_chr = None
 
-    for line in gzopen(cov_fname):
+    for line in Helper_Py3.gzopen(cov_fname):
         cols = line.strip().split()
         if First:
             label = cols[2:]
@@ -119,7 +84,7 @@ def NCP_count (peak_fname,
                 NCPcovs.insert(0, [0]*len(label))
             while chr_ed[prev_chr]:
                 ed = chr_ed[prev_chr].pop(0)
-                dyad = ed - NCP_len/2
+                dyad = ed - NCP_len // 2
                 covs = NCPcovs.pop()
                 if prev_chr not in chr_Ncov:
                     chr_Ncov[prev_chr] = {}
@@ -131,17 +96,17 @@ def NCP_count (peak_fname,
         if prev_chr == None:
             prev_chr = chr
         if order == None:
-            print >> sys.stderr, chr + " pos " + str(pos) +" is reading"
+            print(chr + " pos " + str(pos) +" is reading", file=sys.stderr)
             order = int(math.log10(max(pos, 1)))
         elif int(math.log10(max(pos, 1))) > order:
-            print >> sys.stderr, chr + " pos " + str(pos) +" is reading"
+            print(chr + " pos " + str(pos) +" is reading", file=sys.stderr)
             order += 1
         while chr_st[chr] and pos >= chr_st[chr][0]:
             chr_st[chr].pop(0)
             NCPcovs.insert(0, [0]*len(label))
         while chr_ed[chr] and pos > chr_ed[chr][0]:
             ed = chr_ed[chr].pop(0)
-            dyad = ed - NCP_len/2
+            dyad = ed - NCP_len // 2
             covs = NCPcovs.pop()
             if chr not in chr_Ncov:
                 chr_Ncov[chr] = {}
@@ -161,7 +126,7 @@ def NCP_count (peak_fname,
         NCPcovs.insert(0, [0]*len(label))
     while chr_ed[chr]:
         ed = chr_ed[chr].pop(0)
-        dyad = ed - NCP_len/2
+        dyad = ed - NCP_len // 2
         covs = NCPcovs.pop()
         if chr not in chr_Ncov:
             chr_Ncov[chr] = {}
@@ -171,17 +136,16 @@ def NCP_count (peak_fname,
             chr_Ncov[chr][dyad][name] = covs[k]
     
     # write NCP coverage file
-    print >> sys.stderr, "writing NCP coverage file"
-    #print "writing NCP file"
+    print("writing NCP coverage file", file=sys.stderr)
     
-    f = gzip.open(out_fname + '_Ncov.gtab.gz', 'wb')
+    f = gzip.open(out_fname + '_Ncov.gtab.gz', 'wt')
     s = 'Chromosome\tPosition'
     for i in range(len(label)):
         s += '\t' + label[i]
-    print >> f, s
+    print(s, file=f)
 
     #ID = 0
-    for chr in sorted(chr_Ncov.keys(), cmp=chr_cmp):
+    for chr in sorted(chr_Ncov.keys(), key=Helper_Py3.chr_key):
         for NCPpos in sorted(chr_Ncov[chr].keys()):
             #s = str(ID) + "\t" + chr + "\t" + str(NCPpos)
             s = chr + "\t" + str(NCPpos)
@@ -191,12 +155,12 @@ def NCP_count (peak_fname,
                 except:
                     score = 0
                 s += "\t" + str(score)
-            print >> f, s
+            print(s, file=f)
             #ID += 1
         
     f.close()
 
-    print >> sys.stderr, "Done"
+    print("Done", file=sys.stderr)
 
 
 if __name__ == '__main__':
@@ -208,12 +172,12 @@ if __name__ == '__main__':
         else:
             raise argparse.ArgumentTypeError('Boolean value expected.')
 
-    parser = ArgumentParser(description='Calculate NCP coverage')
-    parser.add_argument(metavar='--peak',
+    parser = argparse.ArgumentParser(description='Calculate NCP coverage')
+    parser.add_argument('--peak',
                         dest="peak_fname",
                         type=str,
                         help='peak gtab file')
-    parser.add_argument(metavar = '--cov',
+    parser.add_argument('--cov',
                         dest='cov_fname',
                         type=str,
                         help='coverage gtab file')
@@ -244,7 +208,7 @@ if __name__ == '__main__':
     if not args.chr_list:
         chr_list = None
     else:
-        chr_list = sorted(args.chr_list, cmp=chr_cmp)
+        chr_list = sorted(args.chr_list, key=Helper_Py3.chr_key)
 
     NCP_count (args.peak_fname,
                args.cov_fname,

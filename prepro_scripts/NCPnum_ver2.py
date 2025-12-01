@@ -1,34 +1,6 @@
-import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
-import math
-import copy
+import sys, argparse 
 import gzip
-
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
-
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rb')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
+import Helper_Py3
 
 # read titration file
 def read_titration (fname, bg=False):
@@ -63,7 +35,7 @@ def NCP_number (tnum_fnames,
 
     for i in range(len(tnums)):
         tnum = tnums[i]
-        print >> sys.stderr, "processing tnum %d" % (tnum) 
+        print("processing tnum %d" % (tnum), file=sys.stderr)
 
         mnum = input_mnum * tnum_tfrac[tnum] # molecule number of titraion
 
@@ -71,10 +43,10 @@ def NCP_number (tnum_fnames,
         total_covs = []
         fnames = tnum_fnames[tnum]
         for fname in fnames:
-            print >> sys.stderr, "\t reading %s" % (fname.rsplit('/', 1)[-1])
+            print("\t reading %s" % (fname.rsplit('/', 1)[-1]), file=sys.stderr)
                             
             First = True
-            for line in gzopen(fname):
+            for line in Helper_Py3.gzopen(fname):
                 line = line.strip()
                 if not line:
                     continue
@@ -116,13 +88,13 @@ def NCP_number (tnum_fnames,
 
         # convert to molecule number
         for fname in fnames:
-            print >> sys.stderr, "\t converting %s" % (fname.rsplit('/', 1)[-1])
+            print("\t converting %s" % (fname.rsplit('/', 1)[-1]), file=sys.stderr)
 
             out_fname = fname.rsplit('_', 1)[0] + '_num.gtab.gz'
             f = gzip.open(out_fname, 'wb')
 
             First = True
-            for line in gzopen(fname):
+            for line in Helper_Py3.gzopen(fname):
                 line = line.strip()
                 if not line:
                     continue
@@ -147,7 +119,7 @@ def NCP_number (tnum_fnames,
                     elif data_type == 'binned':
                         fields = ['Chromosome', 'Start', 'End']                            
                     fields += cols[col_st:col_ed]
-                    print >> f, '\t'.join(fields)
+                    print('\t'.join(fields), file=f)
                     
                     First = False
                     continue
@@ -164,11 +136,11 @@ def NCP_number (tnum_fnames,
                     num = int(round(mnum * frac))
                     nums.append(str(num))
 
-                print >> f, '\t'.join(cols[:col_st] + nums)
+                print('\t'.join(cols[:col_st] + nums), file=f)
 
             f.close()
                     
-    print >> sys.stderr, "Done"
+    print("Done", file=sys.stderr)
 
 
 if __name__ == '__main__':
@@ -180,8 +152,8 @@ if __name__ == '__main__':
         else:
             raise argparse.ArgumentTypeError('Boolean value expected.')
 
-    parser = ArgumentParser(description='Estimate physical number of molecules')
-    parser.add_argument(metavar='-f',
+    parser = argparse.ArgumentParser(description='Estimate physical number of molecules')
+    parser.add_argument('-f',
                         dest="fnames_list",
                         type=str,
                         nargs='+',
@@ -220,7 +192,7 @@ if __name__ == '__main__':
         tnums = range(len(args.fnames_list))
     else:
         if len(args.fnames_list) != len(args.tnums):
-            print >> sys.stderr, "Error: mismatch of input file and titration number."
+            print("Error: mismatch of input file and titration number.", file=sys.stderr)
             sys.exit(1)
         tnums = args.tnums
         
@@ -233,7 +205,7 @@ if __name__ == '__main__':
     if not args.chr_list:
         chr_list = None
     else:
-        chr_list = sorted(args.chr_list, cmp=chr_cmp)
+        chr_list = sorted(args.chr_list, key=Helper_Py3.chr_key)
 
     input_mnum = args.mscale * 1.6*(10**12)
     
