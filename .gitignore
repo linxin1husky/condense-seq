@@ -42,3 +42,6 @@ credentials.json
 
 # Add more repository specific to ignore
 */__pycache__
+data/
+.Rhistory
+
