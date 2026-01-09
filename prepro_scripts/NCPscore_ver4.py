@@ -1,34 +1,34 @@
 import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
+import argparse
 import math
-import copy
 import gzip
+import Helper_Py3
 
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
+# def chr_cmp (chr_name1, chr_name2):
+#     assert chr_name1.startswith('chr')
+#     assert chr_name2.startswith('chr')
+#     chr_num1 = chr_name1[3:]
+#     try:
+#         chr_num1 = int(chr_num1)
+#     except:
+#         pass
+#     chr_num2 = chr_name2[3:]
+#     try:
+#         chr_num2 = int(chr_num2)
+#     except:
+#         pass
+#     if chr_num1 < chr_num2:
+#         return -1
+#     elif chr_num1 > chr_num2:
+#         return 1
+#     return 0
 
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rb')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
+# def gzopen (fname):
+#     if fname.endswith('.gz'):
+#         reading_file = gzip.open(fname, 'rb')
+#     else:
+#         reading_file = open(fname, 'r')
+#     return reading_file
 
 # read titration file
 def read_titration (fname, bg=False):
@@ -81,10 +81,10 @@ def NCP_score (fnames_list,
     for u in range(2):
 
         if u == 0:
-            print >> sys.stderr, "summing data for normalization"
+            print("summing data for normalization", file=sys.stderr)
             total_covs_list = []
         else:
-            print >> sys.stderr, "computing scores"
+            print("computing scores", file=sys.stderr)
 
         for k in range(len(fnames_list)):
             fnames = fnames_list[k]
@@ -105,14 +105,14 @@ def NCP_score (fnames_list,
                         offset = 1
 
             for fname, control_fname in zip(fnames, control_fnames):
-                print >> sys.stderr, "processing %s" % (fname.rsplit('/', 1)[-1])
+                print(f"processing {(fname.rsplit('/', 1)[-1])}", file=sys.stderr)
 
-                test_f = gzopen(fname)
-                control_f = gzopen(control_fname)
+                test_f = Helper_Py3.gzopen(fname)
+                control_f = Helper_Py3.gzopen(control_fname)
 
                 if u == 1:
                     out_fname = fname.rsplit('_', 1)[0] + '_score.gtab.gz'
-                    f = gzip.open(out_fname, 'wb')
+                    f = gzip.open(out_fname, 'wt', encoding='utf-8')
 
                 test_read, control_read = True, True
                 test_EOF, control_EOF = False, False
@@ -224,7 +224,7 @@ def NCP_score (fnames_list,
                                 assert len(total_covs) == col_ed - col_st
                         else:
                             #print >> f, test_line
-                            print >> f, '\t'.join(test_cols[:col_ed])
+                            print('\t'.join(test_cols[:col_ed]), file=f)
 
                         First = False
                         continue
@@ -320,7 +320,7 @@ def NCP_score (fnames_list,
                         row += ['chr' + str(data_pt[0])]
                         row += [str(value) for value in data_pt[1:]]
                         row += s
-                        print >> f, '\t'.join(row)
+                        print('\t'.join(row), file=f)
                         #ID +=1
 
                 if u == 1:
@@ -329,22 +329,22 @@ def NCP_score (fnames_list,
         if u == 0:
             total_covs_list.append(total_covs)
 
-        print >> sys.stderr, ""    
+        print("", file=sys.stderr)   
 
-    print >> sys.stderr, "Done"
+    print("Done", file=sys.stderr)
 
 
 if __name__ == '__main__':
-    def str2bool(v):
-        if v.lower() in ('yes', 'true', 't', 'y', '1'):
-            return True
-        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-            return False
-        else:
-            raise argparse.ArgumentTypeError('Boolean value expected.')
+    # def str2bool(v):
+    #     if v.lower() in ('yes', 'true', 't', 'y', '1'):
+    #         return True
+    #     elif v.lower() in ('no', 'false', 'f', 'n', '0'):
+    #         return False
+    #     else:
+    #         raise argparse.ArgumentTypeError('Boolean value expected.')
 
-    parser = ArgumentParser(description='Get condensability scores')
-    parser.add_argument(metavar='-f',
+    parser = argparse.ArgumentParser(description='Get condensability scores')
+    parser.add_argument('-f',
                         dest="fnames_list",
                         type=str,
                         nargs='+',
@@ -366,7 +366,7 @@ if __name__ == '__main__':
                         help='titration number for each data (in same order of data files)')
     parser.add_argument('--numc',
                         dest="numc_choice",
-                        type=str2bool,
+                        type=bool,
                         nargs='?',
                         const=True,
                         default=False,
@@ -393,7 +393,7 @@ if __name__ == '__main__':
     # check the control filenames
     for fnames in args.fnames_list:
         if len(fnames) != len(args.control_fnames):
-            print >> sys.stderr, "Error: mismatch of data and control files"
+            print("Error: mismatch of data and control files", file=sys.stderr)
             sys.exit(1)
 
             
@@ -401,17 +401,17 @@ if __name__ == '__main__':
     if args.numc_choice:
         numc_choice = True
         if not args.tnums or not args.tfname:
-            print >> sys.stderr, "No titration information"
-            print >> sys.stderr, "starting score computation without correction"
+            print("No titration information", file=sys.stderr)
+            print("starting score computation without correction", file=sys.stderr)
         # check tnums for filenames
         elif len(args.fnames_list) != len(args.tnums):
-            print >> sys.stderr, "Error: mismatch of file and titration number."
+            print("Error: mismatch of file and titration number.", file=sys.stderr)
             sys.exit(1)
         else:
-            print >> sys.stderr, "starting score computation with correction"
+            print("starting score computation with correction", file=sys.stderr)
             
     else:
-        print >> sys.stderr, "starting score computation without correction"
+        print("starting score computation without correction", file=sys.stderr)
         numc_choice = False
 
     # check condensability score metric
@@ -425,14 +425,14 @@ if __name__ == '__main__':
     elif metric.startswith('None'):
         metric = None
     else:
-        print >> sys.stderr, "require proper format of metric argument"
+        print("require proper format of metric argument", file=sys.stderr)
             
     # list target chromosomes
     chr_list = []
     if not args.chr_list:
         chr_list = None
     else:
-        chr_list = sorted(args.chr_list, cmp=chr_cmp)
+        chr_list = sorted(args.chr_list, key=Helper_Py3.chr_key)
         
     NCP_score (args.fnames_list,
                args.control_fnames,

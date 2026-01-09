@@ -11,7 +11,8 @@ def NCP_count (fnames,
     data, label = [], []
     for fname in fnames:
         data.append(fname)
-        label.append(fname.split('.')[0].split('/')[-1])
+        label.append(fname.split('/')[-1].split('.')[0])
+    print(label)
 
     # make genome read length dictionary
     output_list = []
@@ -29,6 +30,7 @@ def NCP_count (fnames,
             text=True,           # <-- this makes lines str, not bytes
             shell=True
         )
+        print("DEBUG: samtools in use...")
 
         chr_rlen = {}
         for line in samtools_proc.stdout:

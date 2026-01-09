@@ -1,52 +1,18 @@
-import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
-import math
-import copy
-import gzip
+import sys, subprocess
+import argparse 
+# import Helper_Py3
 
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
-
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rb')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
-
-def rev_cmp (seq):
-    dic={'A':'T', 'T':'A', 'C':'G', 'G':'C', 'N':'N'}
-    output=''
-    for nt in seq:
-        output+=dic[nt]
-    return output[::-1]
-
-def get_lendist (fnames,
-                 mm_cutoff,
-                 chr_list,
-                 out_fname):
+def NCP_count (fnames,
+               mm_cutoff,
+               chr_list,
+               out_fname):
 
     # gather whole file names
     data, label = [], []
     for fname in fnames:
         data.append(fname)
-        label.append(fname.split('.')[0].split('/')[-1])
+        label.append(fname.split('/')[-1].split('.')[0])
+    print(label)
 
     # make genome read length dictionary
     output_list = []
@@ -55,9 +21,16 @@ def get_lendist (fnames,
     for i in range(len(data)):
         name = label[i]
         filename = data[i]
-        print >> sys.stderr, "reading %s" % (filename)
-        samtools_cmd = ["samtools",  "view", "-F 0x10", filename]
-        samtools_proc = subprocess.Popen(samtools_cmd, stdout=subprocess.PIPE, stderr=open("/dev/null", 'w'))
+        print("reading %s" % (filename), file=sys.stderr) 
+
+        samtools_proc = subprocess.Popen(
+            f"samtools view -F 0x10 {filename}",
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,           # <-- this makes lines str, not bytes
+            shell=True
+        )
+        print("DEBUG: samtools in use...")
 
         chr_rlen = {}
         for line in samtools_proc.stdout:
@@ -121,38 +94,30 @@ def get_lendist (fnames,
         output_list.append(chr_rlen)
 
     # summarize the output
-    print >> sys.stderr, "writing rlen file"
+    print("writing rlen file", file=sys.stderr)
 
     for i in range(len(output_list)):
         chr_rlen = output_list[i]
         name = label[i]
         
-        f = gzip.open(out_fname + '_rlen.txt.gz', 'w')
+        f = open(out_fname + '_' + name + '_rlen.txt', 'w')
         s = 'Chromosome\tReadLength\tCounts'
-        print >> f, s
+        print(s, file=f)
 
-        for chr in sorted(chr_rlen.keys(), cmp=chr_cmp):
+        for chr in sorted(chr_rlen.keys()):
             for rlen in sorted(chr_rlen[chr].keys()):
                 count = chr_rlen[chr][rlen]
                 s = chr + "\t" + str(rlen) + "\t" + str(count)
-                print >> f, s
+                print(s, file=f)
 
         f.close()
 
-    print >> sys.stderr, "Done"
+    print("Done", file=sys.stderr)
     
 
 if __name__ == '__main__':
-    def str2bool(v):
-        if v.lower() in ('yes', 'true', 't', 'y', '1'):
-            return True
-        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-            return False
-        else:
-            raise argparse.ArgumentTypeError('Boolean value expected.')
-
-    parser = ArgumentParser(description='Get read length distribution')
-    parser.add_argument(metavar='-f1',
+    parser = argparse.ArgumentParser(description='Get read length distribution')
+    parser.add_argument('-f1',
                         dest="fnames",
                         type=str,
                         nargs='+',
@@ -179,10 +144,10 @@ if __name__ == '__main__':
     if not args.chr_list:
         chr_list = None
     else:
-        chr_list = sorted(args.chr_list, cmp=chr_cmp)
+        chr_list = sorted(args.chr_list)
 
-    get_lendist (args.fnames,
-                 args.mm_cutoff,
-                 chr_list,
-                 args.out_fname
-                 )
+    NCP_count (args.fnames,
+               args.mm_cutoff,
+               chr_list,
+               args.out_fname
+               )

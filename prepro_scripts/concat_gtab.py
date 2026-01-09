@@ -1,15 +1,7 @@
 import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
-import copy
+import argparse
 import gzip
-
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rb')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
-
+import Helper_Py3
 
 def concatenate (fnames,
                  colnums_list,
@@ -24,7 +16,7 @@ def concatenate (fnames,
 
     for i in range(len(fnames)):
         fname = fnames[i]
-        file = gzopen(fname)
+        file = Helper_Py3.gzopen(fname)
         files.append(file)
         file_pts.append(None)
         file_cols.append(None)
@@ -32,8 +24,8 @@ def concatenate (fnames,
         EOF_checks.append(False)
 
     # start concatenate the files
-    print >> sys.stderr, "Concatenating files"
-    f = gzip.open(out_fname +'.gtab.gz', 'wb')
+    print("Concatenating files", file=sys.stderr)
+    f = gzip.open(out_fname +'.gtab.gz', 'wt', encoding='utf-8')
 
     First = True
     #ID = 0
@@ -112,7 +104,7 @@ def concatenate (fnames,
                 fields = [file_col[colnum] for colnum in colnums]
                 fields_list += fields
 
-            print >> f, '\t'.join(fields_list)
+            print('\t'.join(fields_list), file=sys.stderr)
             First = False
             continue
 
@@ -158,11 +150,11 @@ def concatenate (fnames,
         row += [str(value) for value in data_pt[1:]]
         row += data_list
         
-        print >> f, '\t'.join(row)
+        print('\t'.join(row), file=sys.stderr)
         #ID +=1
 
     f.close()
-    print >> sys.stderr, "Done"
+    print("Done", file=sys.stderr)
 
 
 if __name__ == '__main__':
@@ -174,8 +166,8 @@ if __name__ == '__main__':
         else:
             raise argparse.ArgumentTypeError('Boolean value expected.')
 
-    parser = ArgumentParser(description='concatenate gtab files')
-    parser.add_argument(metavar='-f',
+    parser = argparse.ArgumentParser(description='concatenate gtab files')
+    parser.add_argument('-f',
                         dest="fnames",
                         type=str,
                         nargs='+',

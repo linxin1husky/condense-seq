@@ -91,7 +91,7 @@ def NCP_number (tnum_fnames,
             print("\t converting %s" % (fname.rsplit('/', 1)[-1]), file=sys.stderr)
 
             out_fname = fname.rsplit('_', 1)[0] + '_num.gtab.gz'
-            f = gzip.open(out_fname, 'wb')
+            f = gzip.open(out_fname, 'wt', encoding='utf-8')
 
             First = True
             for line in Helper_Py3.gzopen(fname):
@@ -144,14 +144,6 @@ def NCP_number (tnum_fnames,
 
 
 if __name__ == '__main__':
-    def str2bool(v):
-        if v.lower() in ('yes', 'true', 't', 'y', '1'):
-            return True
-        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-            return False
-        else:
-            raise argparse.ArgumentTypeError('Boolean value expected.')
-
     parser = argparse.ArgumentParser(description='Estimate physical number of molecules')
     parser.add_argument('-f',
                         dest="fnames_list",
