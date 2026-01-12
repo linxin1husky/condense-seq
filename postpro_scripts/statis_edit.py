@@ -11,7 +11,7 @@ import sklearn.cluster
 from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
 from scipy.spatial.distance import squareform
 import scipy.stats
-import Interval_dict
+import Interval_dict_python3
 
 # get histogram
 def get_hist (data, binnum=1000, prob=False):
@@ -192,7 +192,7 @@ def get_fract_dict (ID_test,
                     ID_control,
                     IDs=None,
                     dummy_addon=0,
-                    div_error=np.NaN):
+                    div_error=np.nan):
 
     if IDs == None:
         IDs = set(ID_test.keys()) | set(ID_control.keys())
@@ -223,7 +223,7 @@ def get_fract_profile (ID_tests,
                        ID_controls,
                        IDs=None,
                        dummy_addon=0,
-                       div_error=np.NaN):
+                       div_error=np.nan):
 
     if IDs == None:
         IDs = set(ID_tests.keys()) | set(ID_controls.keys())
@@ -995,7 +995,7 @@ def get_kappa (bvec1, bvec2):
 # correlation analysis
 def correlate (sig1,
                sig2,
-               max_dist=sys.maxint,
+               max_dist=sys.maxsize,
                circular=False,
                clip=10):
     

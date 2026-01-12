@@ -1,44 +1,15 @@
-import sys
 import copy
 import re
-import gzip
 import glob
 import numpy as np
 import statis_edit as statis
-
-# chromosome name comparison
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
-
-# open file w/o gzip compression
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rb')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
+import Helper_Py3
 
 # read titration file
 def read_titration (fname):
     tnum_conc = {}
     tnum_frac = {}
-    for line in gzopen(fname):
+    for line in Helper_Py3.Helper_Py3.Helper_Py3.Helper_Py3.Helper_Py3.gzopen(fname):
         line = line.strip()
         if not line:
             continue
@@ -59,7 +30,7 @@ def read_rlen_file (fname,
                     chr_list=None):
     rlen_count = {}
     First = True
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         if First:
             First = False
             continue
@@ -93,7 +64,7 @@ def read_csv_file (fname,
     counter = -1
 
     #for cols in csv.reader(open(fname), delimiter=delim):
-    for cols in csv.reader(codecs.EncodedFile(gzopen(fname),
+    for cols in csv.reader(codecs.EncodedFile(Helper_Py3.gzopen(fname),
                                               'utf-8',
                                               'utf-8-sig'),
                            delimiter=delim):
@@ -175,7 +146,7 @@ def read_tabular_file (fname,
     First = True
     counter = 0
 
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         if skip_first > counter:
             counter +=1
             continue
@@ -281,7 +252,7 @@ def read_gtab (fname,
 
     First = True
     data_type = None
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         line = line.strip()
 
         if not line:
@@ -422,7 +393,7 @@ def read_gtab_batch (dinfo_dkey,
                 continue
 
             if verbal:
-                print "loading %s" % (fname.rsplit('/')[-1])
+                print(f"loading {(fname.rsplit('/')[-1])}") 
 
             if by_chr:
                 field_chr_ID_value = read_gtab(fname,
@@ -472,7 +443,7 @@ def read_gtab_batch (dinfo_dkey,
                     dkey_ID_value[dkey].update(ID_value)
 
     if verbal:
-        print "Done"
+        print("Done")
         
     if by_chr:
         if by_chr_first:
@@ -566,7 +537,7 @@ def read_ENCODEpeak (fname,
     else:
         ID_value = {}
     
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         cols = line.strip().split()
         chr, st, ed, peakname, _, strand, signal, pvalue, qvalue = cols[:9]
 
@@ -599,11 +570,11 @@ def read_ENCODEpeak (fname,
         return ID_value
 
     
-# read referenec fasta file and get each chromosome length
+# read referenece fasta file and get each chromosome length
 def read_genome_size(fname,
                      chr_choices=None):
     genome_size = {}
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         line = line.strip()
         if line.startswith('>'):
             chr = line.split()[0][1:]
@@ -623,7 +594,7 @@ def read_Gband (fname,
 
     chr_ID_Gband = {}
     ID = 0
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         if line.startswith("#"):
             continue
         cols = line.strip().split()
@@ -660,7 +631,7 @@ def read_chromHMM(fname,
                   state_name=None):
     
     chr_state_intervals = {}
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         cols = line.strip().split()
         chr, st, ed, state = cols[:4]
         if chr_choices and chr not in chr_choices:
@@ -685,7 +656,7 @@ def read_profile(fname,
 
     name_ID_profile = {}
     First = True
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         line = line.strip()
         if not line:
             continue
@@ -761,7 +732,7 @@ def read_profile_batch (dinfo_dkey,
                 continue
 
             if verbal:
-                print "loading %s" % (fname.rsplit('/')[-1])
+                print(f"loading {(fname.rsplit('/')[-1])}") 
 
             if average:
                 field_mprofile = read_profile(fname,
@@ -794,7 +765,7 @@ def read_profile_batch (dinfo_dkey,
                     dkey_geneID_profile[dkey].update(geneID_profile)
 
     if verbal:
-        print "Done"
+        print("Done")
 
     if average:
         return dkey_mprofile

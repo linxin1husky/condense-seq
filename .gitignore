@@ -4,6 +4,7 @@
 
 # Ignore OS-generated temporary files
 .DS_Store             # macOS
+*/.DS_Store
 Thumbs.db             # Windows
 ehthumbs.db           # Windows
 Desktop.ini           # Windows
@@ -44,4 +45,4 @@ credentials.json
 */__pycache__
 data/
 .Rhistory
-
+.ipynb_checkpoints/
