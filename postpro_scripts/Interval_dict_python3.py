@@ -17,10 +17,11 @@ def binary_search (sortlist, target):
 class bin_hash:
 
     def __init__(self,
-                 ID_interval,
+                ID_interval,
                  bin_size,
                  bin_step,
-                 max_pos):
+                 max_pos
+                ):
 
         self.ID_value = {}    
         self.bin_size = bin_size
@@ -30,8 +31,12 @@ class bin_hash:
         # map bin idx to bin ID
         self.idx_ID = {}
         self.ID_idx = {}
-        for ID in ID_interval:
-            st, ed = ID_interval[ID]
+
+        if ID_interval is None:
+            n_bins = int(max_pos // bin_step) + 1
+            ID_interval = {i: (i*bin_step, i*bin_step + bin_size) for i in range(n_bins)}
+
+        for ID, (st, ed) in ID_interval.items():
             assert st % self.bin_step == 0
             assert ed == st + self.bin_size
             idx = int(st / self.bin_step)
@@ -39,7 +44,7 @@ class bin_hash:
             self.idx_ID[idx] = ID
             self.ID_idx[ID] = idx
             
-        print ("hash function is built", file=sys.stderr)
+        # print ("hash function is built", file=sys.stderr)
         
     def find(self, pos):
         find_IDs = []
@@ -158,7 +163,7 @@ class double_hash:
                 if st < ded:
                     self.domain_IDs[i].append(ID)
                 
-        print ("hash fucntion is built", file=sys.stderr)
+        # print ("hash fucntion is built", file=sys.stderr)
 
     def __str__ (self):
         print ("%s\t%s\t%s\t%s" % ("ID", "st", "ed", "value"))

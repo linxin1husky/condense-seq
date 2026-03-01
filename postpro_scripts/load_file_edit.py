@@ -1,44 +1,16 @@
-import sys
 import copy
 import re
-import gzip
 import glob
 import numpy as np
 import statis_edit as statis
-
-# chromosome name comparison
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
-
-# open file w/o gzip compression
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rb')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
+import Helper_Py3
+import logging
 
 # read titration file
 def read_titration (fname):
     tnum_conc = {}
     tnum_frac = {}
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         line = line.strip()
         if not line:
             continue
@@ -59,7 +31,7 @@ def read_rlen_file (fname,
                     chr_list=None):
     rlen_count = {}
     First = True
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         if First:
             First = False
             continue
@@ -93,7 +65,7 @@ def read_csv_file (fname,
     counter = -1
 
     #for cols in csv.reader(open(fname), delimiter=delim):
-    for cols in csv.reader(codecs.EncodedFile(gzopen(fname),
+    for cols in csv.reader(codecs.EncodedFile(Helper_Py3.gzopen(fname),
                                               'utf-8',
                                               'utf-8-sig'),
                            delimiter=delim):
@@ -175,7 +147,7 @@ def read_tabular_file (fname,
     First = True
     counter = 0
 
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         if skip_first > counter:
             counter +=1
             continue
@@ -256,7 +228,7 @@ def read_tabular_file (fname,
         return ID_field_value, field_ID_value
 
 # read gtab file
-def read_gtab (fname,
+def read_gtab(fname,
                mode='row',
                field_choices=None,
                chr_choices=None,
@@ -278,10 +250,11 @@ def read_gtab (fname,
             field_ID_value = {}
         elif mode == 'both':
             ID_field_value, field_ID_value = {}, {}
+    # print("DEBUG: Initialize parameters")
 
     First = True
     data_type = None
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         line = line.strip()
 
         if not line:
@@ -297,11 +270,14 @@ def read_gtab (fname,
                 assert cols[2] == 'End'
                 data_type = 'binned'
                 col_st = 3
-
+            # print(f"DEBUG: the column name is defined: data_type - {data_type}, col_st - {col_st}")
+            
             if field_choices == None:
+                # print(f"DEBUG: the field_choices is NOT specified. number of columns: {len(cols)}")
                 field_names = cols[col_st:]
                 field_idxs = range(col_st, len(cols))
             else:
+                # print(f"DEBUG: the field_choices is specified. number of columns: {len(cols)}")
                 field_names, field_idxs = [], []
                 for k in range(col_st, len(cols)):
                     field_name = cols[k]
@@ -309,7 +285,7 @@ def read_gtab (fname,
                         continue
                     field_names.append(field_name)
                     field_idxs.append(k)
-                    
+            # print(f"DEBUG: filed_names - {field_names}, field_idxs - {field_idxs}")        
             First = False
             continue
         
@@ -322,7 +298,7 @@ def read_gtab (fname,
 
         if chr_choices != None and chr not in chr_choices:
             continue
-                    
+                 
         for field, k in zip(field_names, field_idxs):
             value = cols[k]
             try:
@@ -347,7 +323,7 @@ def read_gtab (fname,
                     except:
                         chr_ID_field_value[chr][ID] = {}
                     chr_ID_field_value[chr][ID][field] = value
-
+                    # print(f"DEBUG: first five elements in dictoinary 'chr_ID_field_value' is: {list(chr_ID_field_value.items())[:5]}")
                 if mode in ['col', 'both']:
                     try:
                         field_chr_ID_value[field]
@@ -358,6 +334,7 @@ def read_gtab (fname,
                     except:
                         field_chr_ID_value[field][chr] = {}
                     field_chr_ID_value[field][chr][ID] = value
+                    # print(f"DEBUG: first five elements in dictoinary 'field_chr_ID_value' is: {list(field_chr_ID_value.items())[:5]}")
             else:
                 if mode in ['row', 'both']:
                     try:
@@ -365,13 +342,15 @@ def read_gtab (fname,
                     except:
                         ID_field_value[ID] = {}
                     ID_field_value[ID][field] = value
-
+                    # print(f"DEBUG: first five elements in dictoinary 'ID_field_value' is: {list(ID_field_value.items())[:5]}")
                 if mode in ['col', 'both']:
                     try:
                         field_ID_value[field]
                     except:
                         field_ID_value[field] = {}
                     field_ID_value[field][ID] = value
+                    # print(f"DEBUG: first five elements in dictoinary 'field_ID_value' is: {list(field_ID_value.items())[:5]}")
+                
 
     if by_chr:
         if mode == 'row':
@@ -387,7 +366,7 @@ def read_gtab (fname,
             return field_ID_value
         if mode == 'both':
             return ID_field_value, field_ID_value
-
+    
 
 # read gtab files in batch
 def read_gtab_batch (dinfo_dkey,
@@ -400,6 +379,7 @@ def read_gtab_batch (dinfo_dkey,
 
     if by_chr_first:
         by_chr = True # by_chr is True if by_chr_first is True
+    # print("DEBUG: by_chr parameter was read-in...")
 
     if by_chr:
         if by_chr_first:
@@ -408,22 +388,29 @@ def read_gtab_batch (dinfo_dkey,
             dkey_chr_ID_value = {}
     else:
         dkey_ID_value = {}
-        
+    # print(f"DEBUG: The chr_dkey_ID_value/dkey_chr_ID_value is defined; length of dinfo_dkey is {len(dinfo_dkey)}.")    
+    
     for fkey in dinfo_dkey:
+        # print(f"DEBUG: the fkey is {fkey}")
         field_dkey = dinfo_dkey[fkey]
-
+        
         if not field_dkey:
+            # print("DEBUG: None of the field_dkey was chosen....")
             field_choices = None
         else:
             field_choices = field_dkey.keys()
+            # print(f"DEBUG: 'field_dkey' is defined as {field_choices}.")
 
-        for fname in glob.glob(data_path + '*'):
+        for fname in glob.glob(data_path + '*gtab.gz'):
+            # print(f"DEBUG: fname is {fname}")
             if not re.match(fkey, fname.rsplit('/')[-1]):
+                # print(f"DEBUG: the {fkey} substring is NOT found in {fname.rsplit('/')[-1]}. Skipping the file for now...")
                 continue
-
+            # print(f"DEBUG: Start to work on the {fname}...")
             if verbal:
-                print "loading %s" % (fname.rsplit('/')[-1])
-
+                print(f"loading {(fname.rsplit('/')[-1])}") 
+            
+            # print(f"DEBUG: Start to use read_gtab() function")
             if by_chr:
                 field_chr_ID_value = read_gtab(fname,
                                                mode='col',
@@ -472,21 +459,25 @@ def read_gtab_batch (dinfo_dkey,
                     dkey_ID_value[dkey].update(ID_value)
 
     if verbal:
-        print "Done"
+        print("Done")
         
     if by_chr:
+        # print("DEBUG: return under the by_chr mode.")
         if by_chr_first:
+            # print(f"DEBUG: return chr_dkey_ID_value with length of {len(chr_dkey_ID_value)}")
             return chr_dkey_ID_value
         else:
+            # print(f"DEBUG: return dkey_chr_value with length of {len(dkey_chr_ID_value)}")
             return dkey_chr_ID_value
     else:
+        # print("DEBUG: return under no mode.")
         return dkey_ID_value
 
 
 # read bedgraph file
 def read_bedgraph (fname,
                    chr_choices=None,
-                   skip_nan=False,
+                   skip_nan=True,
                    by_chr=False):
 
     # sort by chromosomes
@@ -566,7 +557,7 @@ def read_ENCODEpeak (fname,
     else:
         ID_value = {}
     
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         cols = line.strip().split()
         chr, st, ed, peakname, _, strand, signal, pvalue, qvalue = cols[:9]
 
@@ -599,11 +590,11 @@ def read_ENCODEpeak (fname,
         return ID_value
 
     
-# read referenec fasta file and get each chromosome length
+# read referenece fasta file and get each chromosome length
 def read_genome_size(fname,
                      chr_choices=None):
     genome_size = {}
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         line = line.strip()
         if line.startswith('>'):
             chr = line.split()[0][1:]
@@ -623,7 +614,7 @@ def read_Gband (fname,
 
     chr_ID_Gband = {}
     ID = 0
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         if line.startswith("#"):
             continue
         cols = line.strip().split()
@@ -660,7 +651,7 @@ def read_chromHMM(fname,
                   state_name=None):
     
     chr_state_intervals = {}
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         cols = line.strip().split()
         chr, st, ed, state = cols[:4]
         if chr_choices and chr not in chr_choices:
@@ -685,7 +676,7 @@ def read_profile(fname,
 
     name_ID_profile = {}
     First = True
-    for line in gzopen(fname):
+    for line in Helper_Py3.gzopen(fname):
         line = line.strip()
         if not line:
             continue
@@ -747,10 +738,11 @@ def read_profile_batch (dinfo_dkey,
         dkey_mprofile = {}
     else:
         dkey_geneID_profile = {}
-        
+    # print(f"DEBUG: dkey_geneID_profile/dkey_mprofile is initialized...")
+    
     for fkey in dinfo_dkey:
         field_dkey = dinfo_dkey[fkey]
-
+        # print(f"DEBUG: filed_dkey is {dinfo_dkey[fkey]}")
         if not field_dkey:
             field_choices = None
         else:
@@ -761,7 +753,7 @@ def read_profile_batch (dinfo_dkey,
                 continue
 
             if verbal:
-                print "loading %s" % (fname.rsplit('/')[-1])
+                print(f"loading {(fname.rsplit('/')[-1])}") 
 
             if average:
                 field_mprofile = read_profile(fname,
@@ -794,7 +786,7 @@ def read_profile_batch (dinfo_dkey,
                     dkey_geneID_profile[dkey].update(geneID_profile)
 
     if verbal:
-        print "Done"
+        print("Done")
 
     if average:
         return dkey_mprofile
@@ -1023,14 +1015,14 @@ def get_FPKM (count_fname,
               field_choices=None):
 
     # get read counts
-    field_geneID_count = load_file.read_tabular_file (count_fname,
-                                                      mode="col",
-                                                      field_choices=field_choices)
+    field_geneID_count = read_tabular_file(count_fname,
+                                            mode="col",
+                                            field_choices=field_choices)
 
     ## read GTF file and compute exon lengths if not provided
     if geneID_exonlen == None:
         assert GTF_fname != None
-        geneID_field_value = load_file.read_GTF (GTF_fname)
+        geneID_field_value = read_GTF(GTF_fname)
         geneID_exonlen = {}
         for geneID in geneID_field_value:
             exons = geneID_field_value[geneID]['exons']

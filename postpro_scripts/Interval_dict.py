@@ -206,10 +206,12 @@ class double_hash:
             print >> sys.stdout, "hash fucntion is built"
 
     def __str__ (self):
-        print "%s\t%s\t%s\t%s" % ("ID", "st", "ed", "value")
+        # print "%s\t%s\t%s\t%s" % ("ID", "st", "ed", "value")
+        print('\t'.join(["ID", "st", "ed", "value"]))
         for ID, value in self.ID_value.items():
             st, ed = ID_interval[ID]
-            print "%d\t%d\t%d\t%f" % (ID, st, ed, value)
+            # print "%d\t%d\t%d\t%f" % (ID, st, ed, value)
+            print('\t'.join([ID, st, ed, value]))
         return
 
     def find (self, pos):

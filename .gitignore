@@ -4,6 +4,7 @@
 
 # Ignore OS-generated temporary files
 .DS_Store             # macOS
+*/.DS_Store
 Thumbs.db             # Windows
 ehthumbs.db           # Windows
 Desktop.ini           # Windows
@@ -42,3 +43,6 @@ credentials.json
 
 # Add more repository specific to ignore
 */__pycache__
+data/
+.Rhistory
+.ipynb_checkpoints/

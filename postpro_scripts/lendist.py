@@ -11,7 +11,8 @@ def NCP_count (fnames,
     data, label = [], []
     for fname in fnames:
         data.append(fname)
-        label.append(fname.split('.')[0].split('/')[-1])
+        label.append(fname.split('/')[-1].split('.')[0])
+    print(label)
 
     # make genome read length dictionary
     output_list = []
@@ -29,6 +30,7 @@ def NCP_count (fnames,
             text=True,           # <-- this makes lines str, not bytes
             shell=True
         )
+        print("DEBUG: samtools in use...")
 
         chr_rlen = {}
         for line in samtools_proc.stdout:
@@ -97,8 +99,10 @@ def NCP_count (fnames,
     for i in range(len(output_list)):
         chr_rlen = output_list[i]
         name = label[i]
-        
-        f = open(out_fname + '_' + name + '_rlen.txt', 'w')
+        if out_fname:
+            f = open(out_fname + '_' + name + '_rlen.txt', 'w')
+        else:
+            f = open(f"{name}_rlen.txt", 'w')
         s = 'Chromosome\tReadLength\tCounts'
         print(s, file=f)
 
@@ -132,7 +136,7 @@ if __name__ == '__main__':
                         help='tagert chromosome list')
     parser.add_argument('-o',
                         dest='out_fname',
-                        default='output',
+                        # default='output',
                         type=str,
                         help='output prefix filename')
     
