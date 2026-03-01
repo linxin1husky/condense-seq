@@ -99,8 +99,10 @@ def NCP_count (fnames,
     for i in range(len(output_list)):
         chr_rlen = output_list[i]
         name = label[i]
-        
-        f = open(out_fname + '_' + name + '_rlen.txt', 'w')
+        if out_fname:
+            f = open(out_fname + '_' + name + '_rlen.txt', 'w')
+        else:
+            f = open(f"{name}_rlen.txt", 'w')
         s = 'Chromosome\tReadLength\tCounts'
         print(s, file=f)
 
@@ -134,7 +136,7 @@ if __name__ == '__main__':
                         help='tagert chromosome list')
     parser.add_argument('-o',
                         dest='out_fname',
-                        default='output',
+                        # default='output',
                         type=str,
                         help='output prefix filename')
     

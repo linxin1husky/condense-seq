@@ -24,6 +24,40 @@ def norm(L):
     total = sum(L)
     return [L[i]/float(total) for i in range(len(L))]
 
+def auto_ylim(signals, bin_step, min_pos_bp=5_000_000, base=(-0.25, 0.25), pad=0.05):
+    """
+    signals: iterable of 1D arrays (condensability tracks)
+    bin_step: bp per bin
+    min_pos_bp: ignore data before this genomic position (default 5 Mb)
+    """
+    min_bin = int(min_pos_bp // bin_step)
+
+    vals = []
+    for sig in signals:
+        sig = np.asarray(sig)
+        if sig.ndim != 1:
+            continue
+        if len(sig) <= min_bin:
+            continue
+        vals.append(sig[min_bin:])
+
+    if not vals:
+        return base
+
+    vals = np.concatenate(vals)
+    vals = vals[~np.isnan(vals)]
+
+    if vals.size == 0:
+        return base
+
+    ymin, ymax = vals.min(), vals.max()
+    base_min, base_max = base
+
+    if ymin < base_min or ymax > base_max:
+        return (ymin - pad, ymax + pad)
+    else:
+        return base
+
 
 # plot density scatter plot
 def density_scatter (X,
@@ -267,9 +301,17 @@ def plot_corr_matrix (id_data,
                 axes[i,j].set_xlim(xlim)
                 axes[i,j].set_ylim(ylim)
 
-                axes[i,j].set_xscale(xscale, basex=basex)
-                axes[i,j].set_yscale(yscale, basey=basey)
-
+                # --- DEBUG: this is 'matplotlib' version specific error ---
+                if xscale in ("log", "symlog") and basex is not None:
+                    axes[i, j].set_xscale(xscale, base=basex)
+                else:
+                    axes[i, j].set_xscale(xscale)
+                
+                if yscale in ("log", "symlog") and basey is not None:
+                    axes[i, j].set_yscale(yscale, base=basey)
+                else:
+                    axes[i, j].set_yscale(yscale)
+                    
                 if j > 0 and i < data_num -1:
                     axes[i,j].tick_params(axis='both',
                                           which='both',
@@ -416,7 +458,7 @@ def plot_ideogram (Gtype_ideogram,
                    ax=None,
                    note=''):
 
-    ideograms = Gtype_ideogram.values()
+    ideograms = list(Gtype_ideogram.values())
 
     if len(ideograms) <=0:
         return
@@ -607,7 +649,15 @@ def plot_genome_wide (side_names,
         ax.set_ylabel(ylabel, color=ycolor, fontsize=15)
         ax.tick_params('y', colors=ycolor)
         ax.set_ylim(ylim)
-        ax.set_yscale(yscale, basey=basey)
+        if yscale in ("log", "symlog", "logit"):
+            # modern matplotlib uses 'base', not 'basey'
+            if basey is None:
+                ax.set_yscale(yscale)
+            else:
+                ax.set_yscale(yscale, base=basey)
+        else:
+            ax.set_yscale(yscale)
+
 
         for spine in ['top', 'bottom', 'left', 'right']:
             try:
@@ -634,10 +684,32 @@ def plot_genome_wide (side_names,
     axes[0].set_xlabel(xlabel, fontsize=15)
 
     if name_label:
-        leg = axes[0].legend(framealpha=1, loc=legend_loc)
-        for legobj in leg.legendHandles:
-            legobj.set_alpha(1.0)
-            legobj.set_linewidth(2.0)
+        # allow legend_loc to be either a normal loc string OR a (x,y) anchor
+        if isinstance(legend_loc, tuple):
+            leg = axes[0].legend(framealpha=1, loc="upper left", bbox_to_anchor=legend_loc)
+        else:
+            leg = axes[0].legend(framealpha=1, loc=legend_loc)
+
+        
+        # Matplotlib compatibility: legend handle access differs by version
+        handles = None
+        if hasattr(leg, "legendHandles"):
+            handles = leg.legendHandles
+        elif hasattr(leg, "legend_handles"):
+            handles = leg.legend_handles
+        else:
+            # works for line plots
+            handles = leg.get_lines()
+        
+        for h in handles:
+            try:
+                h.set_alpha(1.0)
+            except Exception:
+                pass
+            try:
+                h.set_linewidth(2.0)
+            except Exception:
+                pass
 
     axes[0].set_zorder(1)  # default zorder is 0 for ax1 and ax2
     axes[0].patch.set_visible(False)  # prevents ax1 from hiding ax2
@@ -647,16 +719,18 @@ def plot_genome_wide (side_names,
                        Gtick_locs,
                        Gtick_labels,
                        ax=axes[1])
-
+        # !!! This one might be adjusted once the plot_genome_wide_multiple() is compatiable with python3 !!!
+        axes[1].set_title(note, fontsize=13, pad=8)
+        
     if make_fig:
         if save:
             plt.savefig(save_path + 'Gwide_%s.svg' % (note),
                         format='svg',
                         bbox_inches='tight')
         if show:
-            plt.tight_layout()
+            # plt.tight_layout()
             plt.show()    
-        plt.close()
+        # plt.close()
 
     if Gtype_ideogram:
         return side_ax, axes[1]

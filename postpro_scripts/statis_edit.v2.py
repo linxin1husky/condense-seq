@@ -787,58 +787,33 @@ def bin_data_mean (binID_interval,
                    max_pos=None,
                    domain_size=None,
                    min_sample_size=1,
-                   skip_nan=False):
-    
-    # if hash function not provided
-    if hash_func == None:
-        # Infer missing params from intervals
-        if max_pos is None:
-            max_pos = max(ed for (st, ed) in binID_interval.values())
-        if domain_size is None:
-            # Aim for ~1000 domains, but keep at least 1
-            domain_size = max(1, max_pos // 1000)
-
-        Int_dict = Interval_dict_python3.double_hash(
-            binID_interval,
-            domain_size=domain_size,
-            max_pos=max_pos
-        )
-    else:
-        Int_dict = hash_func
+                   skip_nan=False,
+                   silent=False):
 
     # if hash function not provided
     if hash_func == None:
         Int_dict = Interval_dict_python3.double_hash(binID_interval,
                                              domain_size=domain_size,
-                                             max_pos=max_pos)
+                                             max_pos=max_pos,
+                                             silent=silent)
     else:
         Int_dict = hash_func
 
     Int_dict_sum = copy.deepcopy(Int_dict)
     Int_dict_count = copy.deepcopy(Int_dict)
 
-    # Handle case where ID_value is a scalar (float) instead of dict
-    if isinstance(ID_value, (int, float)):
-        # Single value case: apply it to all locations in ID_loc
-        loc = ID_loc
-        value = ID_value
-        
-        bin_ID = Int_dict.find(loc)
-        if len(bin_ID) > 0:
-            bin_ID = bin_ID[0]  # Get first matching bin
-            Int_dict_sum[bin_ID] += value
-            Int_dict_count[bin_ID] += 1
-    else:
-        # Dictionary case: original behavior
-        for ID in ID_value:
-            value = ID_value[ID]
-            loc = ID_loc[ID]
+    for ID in ID_value:
+        value = ID_value[ID]
+        loc = ID_loc[ID]
 
-            bin_ID = Int_dict.find(loc)
-            if len(bin_ID) > 0:
-                bin_ID = bin_ID[0]
-                Int_dict_sum[bin_ID] += value
-                Int_dict_count[bin_ID] += 1
+        try:
+            st, ed = loc
+            Int_dict_sum.insert_range(st, ed, value)
+            Int_dict_count.insert_range(st, ed, 1)
+        except:
+            pos = loc
+            Int_dict_sum.insert(pos, value)
+            Int_dict_count.insert(pos, 1)
 
     binID_sum = Int_dict_sum.get()
     binID_count = Int_dict_count.get()
@@ -866,86 +841,172 @@ def rbin_data_mean(
     bin_step,
     ID_loc,
     ID_value,
-    binID_interval=None,
-    hash_func=None,
-    max_pos=None,
-    min_sample_size=1,
-    skip_nan=False,
-    silent=False,   # kept for API compatibility; not used by bin_hash
+    max_pos,
+    bin_start=0,
+    bin_num=None,
+    rmin=0,
+    rmax=None,
+    # --- optional track export ---
+    export=None,            # None | "bedgraph" | "bigwig" | "both"
+    out_path=None,          # base path without extension (recommended)
+    chrom=None,             # e.g. "chr1" (required for export)
+    chrom_sizes=None,       # path to chrom.sizes (required for bigwig)
+    bedGraphToBigWig="bedGraphToBigWig",  # executable or full path
+    name=None,              # optional track name (bedGraph header)
+    description=None,       # optional track description
+    clamp_negative=False,   # clamp values < 0 to 0 for tracks
+    silent=False,           # keep for compatibility; not required
 ):
-    # Build ID_interval if not provided
-    if binID_interval is None:
-        if max_pos is None:
-            raise ValueError("max_pos must be provided when binID_interval is None")
+    """
+    Bin values by genomic coordinate (fixed bins anchored at bin_start) and return mean per bin.
 
-        # bin IDs as integers 0..N
-        n_bins = int(max_pos // bin_step) + 1
-        binID_interval = {
-            i: (i * bin_step, i * bin_step + bin_size)
-            for i in range(n_bins)
-        }
+    - Bins are defined as:
+        binID i covers [bin_start + i*bin_step, bin_start + i*bin_step + bin_size)
+    - Bin index is computed as floor((loc - bin_start)/bin_step)
 
-    # Build hash function if not provided
-    if hash_func is None:
-        Int_dict = Interval_dict_python3.bin_hash(
-            binID_interval,  # ID_interval FIRST
-            bin_size,
-            bin_step,
-            max_pos
-        )
-    else:
-        Int_dict = hash_func
+    ID_loc: dict {ID: genomic_position}
+    ID_value: dict {ID: signal_value}
+    max_pos: chromosome length or region end used to determine bin_num if not provided
 
-    Int_dict_sum = copy.deepcopy(Int_dict)
-    Int_dict_count = copy.deepcopy(Int_dict)
+    Optional export:
+      export="bedgraph" / "bigwig" / "both"
+      Requires chrom and out_path; bigwig also requires chrom_sizes and bedGraphToBigWig.
+    """
+    import math
 
-    # Handle case where ID_value is a scalar (float) instead of dict
-    if isinstance(ID_value, (int, float)):
-        # Single value case: apply it to all locations in ID_loc
-        for ID in ID_loc:
-            loc = ID_loc[ID]
-            value = ID_value
-            
-            bin_ID = Int_dict.find(loc)
-            if len(bin_ID) > 0:
-                bin_ID = bin_ID[0]  # Get first matching bin
-                Int_dict_sum[bin_ID] += value
-                Int_dict_count[bin_ID] += 1
-    else:
-        # Dictionary case: original behavior
-        for ID in ID_value:
-            value = ID_value[ID]
-            loc = ID_loc[ID]
+    # -----------------------------
+    # nested helpers (self-contained)
+    # -----------------------------
+    def _write_bedgraph_from_binmean(
+        bedgraph_path,
+        chrom,
+        binID_interval,
+        binID_mean,
+        name=None,
+        description=None,
+        clamp_negative=False,
+    ):
+        with open(bedgraph_path, "w") as out:
+            # Optional UCSC track line
+            if name or description:
+                track_items = ['type=bedGraph']
+                if name:
+                    track_items.append(f'name="{name}"')
+                if description:
+                    track_items.append(f'description="{description}"')
+                out.write("track " + " ".join(track_items) + "\n")
 
-            bin_ID = Int_dict.find(loc)
-            if len(bin_ID) > 0:
-                bin_ID = bin_ID[0]
-                Int_dict_sum[bin_ID] += value
-                Int_dict_count[bin_ID] += 1
+            for binID in sorted(binID_interval.keys()):
+                st, ed = binID_interval[binID]
+                if ed <= st:
+                    continue
+                val = binID_mean.get(binID, 0.0)
+                if clamp_negative and val < 0:
+                    val = 0.0
+                out.write(f"{chrom}\t{int(st)}\t{int(ed)}\t{val:.6f}\n")
 
-    binID_sum = Int_dict_sum.get()
-    binID_count = Int_dict_count.get()
+    def _bedgraph_to_bigwig(
+        bedgraph_path,
+        chrom_sizes,
+        bw_path,
+        bedGraphToBigWig="bedGraphToBigWig",
+    ):
+        import subprocess
+        cmd = [bedGraphToBigWig, bedgraph_path, chrom_sizes, bw_path]
+        try:
+            subprocess.run(cmd, check=True)
+        except subprocess.CalledProcessError as e:
+            raise RuntimeError(
+                "bedGraphToBigWig failed. Command was:\n" + " ".join(cmd)
+            ) from e
 
-    # Determine which bins to report
-    binIDs = binID_interval.keys()
+    # -----------------------------
+    # define number of bins
+    # -----------------------------
+    if bin_num is None:
+        # how many steps fit from bin_start to max_pos
+        bin_num = int(math.ceil(float(max_pos - bin_start) / float(bin_step)))
+        if bin_num < 0:
+            bin_num = 0
 
-    binID_mean = {}
-    for binID in binIDs:
-        total = binID_sum.get(binID, np.nan)
-        count = binID_count.get(binID, 0)
+    # intervals for export (and sometimes useful elsewhere)
+    binID_interval = {}
+    for binID in range(bin_num):
+        st = bin_start + binID * bin_step
+        ed = st + bin_size
+        binID_interval[binID] = (st, ed)
 
-        if count < min_sample_size:
-            mean = np.nan
-        else:
-            mean = float(total) / count
+    # -----------------------------
+    # accumulate sum + count
+    # -----------------------------
+    bin_sum = {binID: 0.0 for binID in range(bin_num)}
+    bin_count = {binID: 0 for binID in range(bin_num)}
 
-        if skip_nan and np.isnan(mean):
+    # ID_loc is dict; iterate items for speed
+    for ID, loc in ID_loc.items():
+        if int(loc) < rmin:
+            continue
+        if rmax is not None and loc >= rmax:
+            continue
+        val = ID_value.get(ID, None)
+        if val is None:
             continue
 
-        binID_mean[binID] = mean
+        # compute bin index using fixed bin_step anchored at bin_start
+        binID = int(math.floor((float(loc) - float(bin_start)) / float(bin_step)))
+        if 0 <= binID < bin_num:
+            bin_sum[binID] += float(val)
+            bin_count[binID] += 1
+
+    # -----------------------------
+    # compute mean per bin
+    # -----------------------------
+    binID_mean = {}
+    for binID in range(bin_num):
+        c = bin_count[binID]
+        if c > 0:
+            binID_mean[binID] = bin_sum[binID] / float(c)
+        else:
+            binID_mean[binID] = 0.0
+
+    # -----------------------------
+    # optional export
+    # -----------------------------
+    if export is not None:
+        export = str(export).lower()
+        if export not in ("bedgraph", "bigwig", "both"):
+            raise ValueError(f"export must be one of None/'bedgraph'/'bigwig'/'both', got: {export}")
+
+        if chrom is None:
+            raise ValueError("export requested but chrom=None. Provide chrom='chr1' etc.")
+        if out_path is None:
+            raise ValueError("export requested but out_path=None. Provide out_path='tracks/mytrack' etc.")
+
+        bedgraph_path = f"{out_path}.bedGraph"
+
+        # always write bedGraph if exporting anything (BigWig conversion needs it)
+        _write_bedgraph_from_binmean(
+            bedgraph_path=bedgraph_path,
+            chrom=chrom,
+            binID_interval=binID_interval,
+            binID_mean=binID_mean,
+            name=name,
+            description=description,
+            clamp_negative=clamp_negative,
+        )
+
+        if export in ("bigwig", "both"):
+            if chrom_sizes is None:
+                raise ValueError("export bigwig requested but chrom_sizes=None. Provide path to chrom.sizes.")
+            bw_path = f"{out_path}.bw"
+            _bedgraph_to_bigwig(
+                bedgraph_path=bedgraph_path,
+                chrom_sizes=chrom_sizes,
+                bw_path=bw_path,
+                bedGraphToBigWig=bedGraphToBigWig,
+            )
 
     return binID_mean
-
 
 ### Spectral clustering
 def Spectral_clustering (score_matrix,

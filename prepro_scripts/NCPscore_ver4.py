@@ -4,32 +4,6 @@ import math
 import gzip
 import Helper_Py3
 
-# def chr_cmp (chr_name1, chr_name2):
-#     assert chr_name1.startswith('chr')
-#     assert chr_name2.startswith('chr')
-#     chr_num1 = chr_name1[3:]
-#     try:
-#         chr_num1 = int(chr_num1)
-#     except:
-#         pass
-#     chr_num2 = chr_name2[3:]
-#     try:
-#         chr_num2 = int(chr_num2)
-#     except:
-#         pass
-#     if chr_num1 < chr_num2:
-#         return -1
-#     elif chr_num1 > chr_num2:
-#         return 1
-#     return 0
-
-# def gzopen (fname):
-#     if fname.endswith('.gz'):
-#         reading_file = gzip.open(fname, 'rb')
-#     else:
-#         reading_file = open(fname, 'r')
-#     return reading_file
-
 # read titration file
 def read_titration (fname, bg=False):
     all_fracs = {}
@@ -49,7 +23,7 @@ def read_titration (fname, bg=False):
         tnum_tfrac[tnum] = total_frac
     return tnum_tfrac
 
-# metric for condensabiltiy
+# metric for condensability
 def get_score (test, control, metric):
     if control <= 0:
         return "NA"
