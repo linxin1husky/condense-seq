@@ -1,7 +1,7 @@
 import sys, subprocess, re
 import argparse
 import gzip
-import Helper_Py3
+import Helper_Py3_compat as Helper_Py3
 
 """
 Step 1 of condense-seq pipeline after bowtie2 alignment.
@@ -42,8 +42,7 @@ def NCP_count (fnames,
                 continue
             
             cols = line.strip().split()
-            read_id, flag, ref_id, pos, mapQ, cigar_str = cols[:6]
-            read_id=":".join(read_id.split(':')[3:7])
+            _, flag, ref_id, pos, _, cigar_str = cols[:6]
 
             tlen = int(cols[8])
             flag, pos = int(flag), int(pos)
@@ -102,7 +101,7 @@ def NCP_count (fnames,
             else: # right read
                 end_pos = pos
                 cigar_str=re.split(r'(\d+)',cigar_str)[1:]
-                for i in range(len(cigar_str)/2):
+                for i in range(len(cigar_str)//2):
                     s = cigar_str[2*i+1]
                     num = int(cigar_str[2*i])
                     if s == 'M' or s == 'D':
@@ -161,13 +160,7 @@ def NCP_count (fnames,
         
 
 if __name__ == '__main__':
-    def str2bool(v):
-        if v.lower() in ('yes', 'true', 't', 'y', '1'):
-            return True
-        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-            return False
-        else:
-            raise argparse.ArgumentTypeError('Boolean value expected.')
+    str2bool = Helper_Py3.str2bool
 
     parser = argparse.ArgumentParser(
         description='Calculate coverage along the genome',
@@ -222,21 +215,12 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # get length for each chromosome
-    genome_size = {}
     if not args.ref_fname:
         print("Error: there is no reference file input.", file=sys.stderr)
         sys.exit(1)
         
-    for line in Helper_Py3.gzopen(args.ref_fname):
-        line = line.strip()
-        if line.startswith('>'):
-            key = line.split()[0][1:]
-            assert key not in genome_size
-            genome_size[key] = 0
-            continue
-        genome_size[key] += len(line)
+    genome_size = Helper_Py3.genome_sizes(args.ref_fname)
 
-    chr_list = []
     if not args.chr_list:
         chr_list = sorted(genome_size.keys(), key=Helper_Py3.chr_key)
     else:

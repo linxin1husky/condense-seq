@@ -1,41 +1,6 @@
-import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
-import math
-import copy
-import gzip
-
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
-
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rb')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
-
-def rev_cmp (seq):
-    dic={'A':'T', 'T':'A', 'C':'G', 'G':'C', 'N':'N'}
-    output=''
-    for nt in seq:
-        output+=dic[nt]
-    return output[::-1]
+import sys, math, copy, gzip
+from argparse import ArgumentParser
+import Helper_Py3_compat as Helper_Py3
 
 def NCP_motif (peak_fname,
                ref_fname,
@@ -46,13 +11,13 @@ def NCP_motif (peak_fname,
                out_fname):
 
     # read peak file
-    print >> sys.stderr, "reading peak file"
+    print("reading peak file", file=sys.stderr)
     chr_peak = {}
     chr_peakpos = {}
     chr_Pcov = {}
     chr_info = {}
     First = True
-    for line in gzopen(peak_fname):
+    for line in Helper_Py3.open_any(peak_fname, "rt"):
         cols = line.strip().split()
         if First:
             label = cols[2:]
@@ -93,16 +58,16 @@ def NCP_motif (peak_fname,
         chr_peakpos[chr] = sorted(chr_peakpos[chr])
         chr_info[chr] = sorted(chr_info[chr])
         chr_info[chr] = [info for pos, info in chr_info[chr]]
-        chr_st[chr] = [pos - motif_len/2 for pos in chr_peakpos[chr]]
+        chr_st[chr] = [pos - motif_len // 2 for pos in chr_peakpos[chr]]
 
     # reading coverage file and get NCP peak coverage if necessary
     if cov_fname:
-        print >> sys.stderr, "reading coverage file"
+        print("reading coverage file", file=sys.stderr)
         pt = 0
         First = True
         prev_chr = None
         order = None
-        for line in gzopen(cov_fname):
+        for line in Helper_Py3.open_any(cov_fname, "rt"):
             cols = line.strip().split()
             if First:
                 label = cols[2:]
@@ -115,10 +80,10 @@ def NCP_motif (peak_fname,
                 pt = 0
                 prev_chr = chr
             if order == None:
-                print >> sys.stderr, chr + " pos " + str(pos) +" is reading"
+                print(chr + " pos " + str(pos) +" is reading", file=sys.stderr)
                 order = int(math.log10(max(pos, 1)))
             elif int(math.log10(max(pos, 1))) > order:
-                print >> sys.stderr, chr + " pos " + str(pos) +" is reading"
+                print(chr + " pos " + str(pos) +" is reading", file=sys.stderr)
                 order += 1
             if pt >= len(chr_peakpos[chr]):
                 continue
@@ -139,16 +104,16 @@ def NCP_motif (peak_fname,
         chr_peak = copy.deepcopy(chr_Pcov)
 
     # start writing motif file
-    print >> sys.stderr, "writing motif file"
-    f = gzip.open(out_fname + '_motif.txt.gz', 'wb')
+    print("writing motif file", file=sys.stderr)
+    f = gzip.open(out_fname + '_motif.txt.gz', 'wt', encoding='utf-8', newline='\n')
     s = 'Sample\tChromosome\tPosition\tStrand\tWeight\tSequence'
-    print >> f, s
+    print(s, file=f)
 
     # read genome to get sequence
-    print >> sys.stderr, "reading reference genome file"
+    print("reading reference genome file", file=sys.stderr)
     chrhit_count = 0
     Find = False
-    for line in gzopen(ref_fname):
+    for line in Helper_Py3.open_any(ref_fname, "rt"):
         line = line.strip()
         if line.startswith(">"):
             while Find and len(left) > 0:
@@ -163,7 +128,7 @@ def NCP_motif (peak_fname,
                         continue
                     s = name + "\t" + chr + "\t" + str(peakpos) + "\t" + '+' + "\t" + str(weight)
                     s += '\t' + seq
-                    print >> f, s
+                    print(s, file=f)
             Find = False
             if chrhit_count >= len(chr_st):
                 break
@@ -195,7 +160,7 @@ def NCP_motif (peak_fname,
                             continue
                         s = name + "\t" + chr + "\t" + str(peakpos) + "\t" + '+' + "\t" + str(weight)
                         s += '\t' + seq
-                        print >> f, s
+                        print(s, file=f)
                 else:
                     left.append([idx, seq])
             while pt + len(line) >= pos and k < len(chr_st[chr]):
@@ -215,7 +180,7 @@ def NCP_motif (peak_fname,
                             continue
                         s = name + "\t" + chr + "\t" + str(peakpos) + "\t" + '+' + "\t" + str(weight)
                         s += '\t' + seq
-                        print >> f, s
+                        print(s, file=f)
                 else:
                     left.append([k, seq])
                 k += 1
@@ -238,21 +203,13 @@ def NCP_motif (peak_fname,
                 continue
             s = name + "\t" + chr + "\t" + str(peakpos) + "\t" + '+' + "\t" + str(weight)
             s += '\t' + seq
-            print >> f, s
+            print(s, file=f)
     
     f.close()
-    print >> sys.stderr, "Done"
+    print("Done", file=sys.stderr)
 
 
 if __name__ == '__main__':
-    def str2bool(v):
-        if v.lower() in ('yes', 'true', 't', 'y', '1'):
-            return True
-        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-            return False
-        else:
-            raise argparse.ArgumentTypeError('Boolean value expected.')
-
     parser = ArgumentParser(description='Get motif sequences')
     parser.add_argument(metavar='--peak',
                         dest="peak_fname",
@@ -290,14 +247,13 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.motif_len % 2 == 0:
-        print >> sys.stderr, "Error: motif length should be odd number."
+        print("Error: motif length should be odd number.", file=sys.stderr)
         sys.exit(1)
     
-    chr_list = []
     if not args.chr_list:
         chr_list = None
     else:
-        chr_list = sorted(args.chr_list, cmp=chr_cmp)
+        chr_list = sorted(args.chr_list, key=Helper_Py3.chr_key)
 
     if not args.cov_fname:
         cov_fname = None

@@ -1,41 +1,8 @@
-import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
+import sys, subprocess, re
+from argparse import ArgumentParser
 import math
-import copy
 import gzip
-
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
-
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rb')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
-
-def rev_cmp (seq):
-    dic={'A':'T', 'T':'A', 'C':'G', 'G':'C', 'N':'N'}
-    output=''
-    for nt in seq:
-        output+=dic[nt]
-    return output[::-1]
+import Helper_Py3_compat as Helper_Py3
 
 def NCP_occ (fnames,
              genome_size,
@@ -60,11 +27,14 @@ def NCP_occ (fnames,
     # open the sam file
     for i in range(len(data)):
         name = label[i]
-        #chr_cov = out_cov[i]
         filename = data[i]
-        print >> sys.stderr, "reading %s" % (filename)
-        samtools_cmd = ["samtools",  "view", "-F 0x10", filename]
-        samtools_proc = subprocess.Popen(samtools_cmd, stdout=subprocess.PIPE, stderr=open("/dev/null", 'w'))
+        print("reading %s" % (filename), file=sys.stderr)
+        samtools_proc = subprocess.Popen(
+            ["samtools", "view", "-F 0x10", filename],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
 
         for line in samtools_proc.stdout:
             # skip the header
@@ -72,8 +42,7 @@ def NCP_occ (fnames,
                 continue
             
             cols = line.strip().split()
-            read_id, flag, ref_id, pos, mapQ, cigar_str = cols[:6]
-            read_id=":".join(read_id.split(':')[3:7])
+            _, flag, ref_id, pos, _, cigar_str = cols[:6]
 
             tlen = int(cols[8])
             flag, pos = int(flag), int(pos)
@@ -101,10 +70,6 @@ def NCP_occ (fnames,
             if flag & 0x2 == 0:
                 continue
 
-            # invalid: ambiguous mapping
-            #mapQ = float(mapQ)
-            #if mapQ < 10:
-            #    type = 'invalid:multimap'
 
             AS,NM,MD = None, None, None
             for i in range(11, len(cols)):
@@ -130,22 +95,22 @@ def NCP_occ (fnames,
             if tlen > 0: # left read
                 end_pos = pos + tlen
                 if tlen % 2 != 0:
-                    midscore_list = [[pos+tlen/2, 1]]
+                    midscore_list = [[pos + (tlen // 2), 1]]
                 else:
-                    midscore_list = [[pos+tlen/2-1, 0.5], [pos+tlen/2, 0.5]]
+                    midscore_list = [[pos + (tlen // 2) - 1, 0.5], [pos + (tlen // 2), 0.5]]
             else: # right read
                 end_pos = pos
-                cigar_str=re.split('(\d+)',cigar_str)[1:]
-                for i in range(len(cigar_str)/2):
+                cigar_str=re.split(r'(\d+)',cigar_str)[1:]
+                for i in range(len(cigar_str)//2):
                     s = cigar_str[2*i+1]
                     num = int(cigar_str[2*i])
                     if s == 'M' or s == 'D':
                         end_pos += num
                 pos = end_pos + tlen
                 if tlen % 2 != 0:
-                    midscore_list = [[end_pos+tlen/2-1, 1]]
+                    midscore_list = [[end_pos + (tlen // 2) - 1, 1]]
                 else:
-                    midscore_list = [[end_pos+tlen/2-1, 0.5], [end_pos+tlen/2, 0.5]]
+                    midscore_list = [[end_pos + (tlen // 2) - 1, 0.5], [end_pos + (tlen // 2), 0.5]]
 
             if ref_id not in chr_mid:
                 chr_mid[ref_id] = {}
@@ -160,10 +125,10 @@ def NCP_occ (fnames,
     # mark start-end position of nucleosome
     # no smoothing
     if NCP_len:
-        for chr in sorted(chr_mid.keys()):
+        for chr in sorted(chr_mid.keys(), key=Helper_Py3.chr_key):
             for pos in chr_mid[chr]:
-                st = pos - NCP_len/2
-                ed = pos + NCP_len/2 + 1
+                st = pos - NCP_len // 2
+                ed = pos + NCP_len // 2 + 1
                 for name in chr_mid[chr][pos]:
                     score = chr_mid[chr][pos][name]
                     if chr not in chr_profile:
@@ -181,7 +146,7 @@ def NCP_occ (fnames,
                     
     # gaussain smoothing
     if sigma:
-        for chr in sorted(chr_mid.keys()):
+        for chr in sorted(chr_mid.keys(), key=Helper_Py3.chr_key):
             for pos in chr_mid[chr]:
                 for name in chr_mid[chr][pos]:
                     score = chr_mid[chr][pos][name]
@@ -203,16 +168,15 @@ def NCP_occ (fnames,
                         chr_profile[chr][ed][name] -= 1
                 
     # summarize the output
-    print >> sys.stderr, "writing occupancy file"
+    print("writing occupancy file", file=sys.stderr)
 
-    f = gzip.open(out_fname + '_occ.gtab.gz', 'wb')
+    f = gzip.open(out_fname + '_occ.gtab.gz', 'wt', encoding='utf-8', newline='\n')
     s = 'Chromosome\tPosition'
     for i in range(len(label)):
         s += '\t' + label[i]
-    print >> f, s
+    print(s, file=f)
 
-    #ID = 0
-    for chr in sorted(chr_profile.keys(), cmp=chr_cmp):
+    for chr in sorted(chr_profile.keys(), key=Helper_Py3.chr_key):
         previous = [0]*len(label)
         if skip_zero:
             start = min(chr_profile[chr])
@@ -220,7 +184,7 @@ def NCP_occ (fnames,
         else:
             start = 0
             end = genome_size[chr]
-        for i in xrange(start, end):
+        for i in range(start, end):
             #s = str(ID) + "\t" + chr + "\t" + str(i)
             s = chr + "\t" + str(i)
             for j in range(len(label)):
@@ -234,22 +198,14 @@ def NCP_occ (fnames,
                 previous[j] = current
             if skip_zero and sum(previous) == 0:
                 continue
-            print >> f, s
+            print(s, file=f)
             #ID += 1
         
     f.close()
-    print >> sys.stderr, "Done"
+    print("Done", file=sys.stderr)
         
 
 if __name__ == '__main__':
-    def str2bool(v):
-        if v.lower() in ('yes', 'true', 't', 'y', '1'):
-            return True
-        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-            return False
-        else:
-            raise argparse.ArgumentTypeError('Boolean value expected.')
-
     parser = ArgumentParser(description='Calculate occupancy along the genome')
     parser.add_argument(metavar='-f1',
                         dest="fnames",
@@ -289,7 +245,7 @@ if __name__ == '__main__':
                         help='Gaussain smoothing binwidth, default:20bp')
     parser.add_argument('--skip',
                         dest="skip_zero",
-                        type=str2bool,
+                        type=Helper_Py3.str2bool,
                         nargs='?',
                         const=True,
                         default=False,
@@ -308,26 +264,16 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # get length for each chromosome
-    genome_size = {}
-
     if not args.ref_fname:
-        print >> sys.stderr, "Error: there is no reference file input."
+        print("Error: there is no reference file input.", file=sys.stderr)
         sys.exit(1)
 
-    for line in open(args.ref_fname):
-        line = line.strip()
-        if line.startswith('>'):
-            key = line.split()[0][1:]
-            assert key not in genome_size
-            genome_size[key] = 0
-            xcontinue
-        genome_size[key] += len(line)
+    genome_size = Helper_Py3.genome_sizes(args.ref_fname)
 
-    chr_list = []
     if not args.chr_list:
-        chr_list = sorted(genome_size.keys(), cmp=chr_cmp)
+        chr_list = sorted(genome_size.keys(), key=Helper_Py3.chr_key)
     else:
-        chr_list = sorted(args.chr_list, cmp=chr_cmp)
+        chr_list = sorted(args.chr_list, key=Helper_Py3.chr_key)
 
     if args.sigma:
         NCP_len = None

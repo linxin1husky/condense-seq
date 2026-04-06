@@ -1,8 +1,8 @@
 import sys, subprocess, re
 import argparse
-import math, copy
+import copy
 import gzip
-import Helper_Py3
+import Helper_Py3_compat as Helper_Py3
 
 def bin_count (fnames,
                genome_size,
@@ -25,7 +25,7 @@ def bin_count (fnames,
     # partition the genome
     chr_bins = {}
     for chr in chr_list:
-        chr_bins[chr] = [0] * int(math.ceil(float(genome_size[chr]) / win_size))
+        chr_bins[chr] = [0] * int((genome_size[chr] + win_size - 1) // win_size)
         
     # output genome count dictionary
     out = [copy.deepcopy(chr_bins) for i in range(len(data))]
@@ -48,8 +48,7 @@ def bin_count (fnames,
                 continue
             
             cols = line.strip().split()
-            read_id, flag, ref_id, pos, mapQ, cigar_str = cols[:6]
-            read_id=":".join(read_id.split(':')[3:7])
+            _, flag, ref_id, pos, _, cigar_str = cols[:6]
             
             tlen = int(cols[8])
             flag, pos = int(flag), int(pos)
@@ -62,25 +61,17 @@ def bin_count (fnames,
             
             # invalid: mapping failure
             if pos < 0:
-                #type = 'invalid:mutant'
                 continue
             if flag & 0x4 != 0:
-                #type = 'invalid:mutant'
                 continue
             if ref_id == '*':
                 continue
 
             # invalid: mate pairing failure
             if flag & 0x8 != 0:
-                #type = 'invalid:mutant'
                 continue
             if flag & 0x2 == 0:
                 continue
-
-            # invalid: ambiguous mapping
-            #mapQ = float(mapQ)
-            #if mapQ < 10:
-            #    type = 'invalid:multimap'
 
             AS,NM,MD = None, None, None
             for i in range(11, len(cols)):
@@ -106,14 +97,13 @@ def bin_count (fnames,
             if tlen > 0: # left read
                 # split the center if tlen is even
                 if tlen % 2 != 0:
-                    NCPscore = [[pos+tlen/2, 1]]
+                    NCPscore = [[pos + (tlen // 2), 1]]
                 else:
-                    #NCPscore = [[pos+tlen/2-1, 0.5], [pos+tlen/2, 0.5]]
-                    NCPscore = [[pos+tlen/2-1, 1]] # don't worry about even tlen case
+                    NCPscore = [[pos + (tlen // 2) - 1, 1]] # don't worry about even tlen case
             else: # right read
                 end_pos = pos
                 cigar_str=re.split(r'(\d+)',cigar_str)[1:]
-                for i in range(len(cigar_str)/2):
+                for i in range(len(cigar_str)//2):
                     s = cigar_str[2*i+1]
                     num = int(cigar_str[2*i])
                     if s == 'M' or s == 'D':
@@ -121,10 +111,9 @@ def bin_count (fnames,
 
                 # split the center if tlen is even
                 if tlen % 2 != 0:
-                    NCPscore = [[end_pos+tlen/2-1, 1]]
+                    NCPscore = [[end_pos + (tlen // 2) - 1, 1]]
                 else:
-                    #NCPscore = [[end_pos+tlen/2-1, 0.5], [pos+tlen/2, 0.5]]
-                    NCPscore = [[end_pos+tlen/2-1, 1]] # don't worry about even tlen case
+                    NCPscore = [[end_pos + (tlen // 2) - 1, 1]] # don't worry about even tlen case
 
             # collect valid data
             for NCPpos, score in NCPscore:
@@ -139,8 +128,6 @@ def bin_count (fnames,
     print("writing bin file", file=sys.stderr)
 
     f = gzip.open(out_fname + '_bin.gtab.gz', 'wt', encoding='utf-8', newline='\n')
-    #s = 'Chromosome\tPosition'
-    #s = 'Chromosome\tStart\tEnd'
     s = 'Chromosome\tStart\tEnd'
     for i in range(len(label)):
         s += '\t' + label[i]
@@ -151,13 +138,9 @@ def bin_count (fnames,
     print(s, file=f)
         
 
-    #ID = 0
     for chr in sorted(g_count.keys(), key=Helper_Py3.chr_key):
         for i in range(len(g_count[chr])):
-            #Binpos = i + win_size/2
-            #s = str(ID) + "\t" + chr + "\t" + str(Binpos)
             st, ed = i*win_size, (i+1)*win_size 
-            #s = str(ID) + "\t" + chr + "\t" + str(st) + '\t' + str(ed)
             s = chr + "\t" + str(st) + '\t' + str(ed)
             total = 0
             for j in range(len(out)):
@@ -174,7 +157,6 @@ def bin_count (fnames,
                 else:
                     mean_tlen = 0
                 s += '\t%f' % (mean_tlen)
-            #ID += 1
             print(s, file=f)
 
     f.close()
@@ -183,16 +165,10 @@ def bin_count (fnames,
     
 
 if __name__ == '__main__':
-    def str2bool(v):
-        if v.lower() in ('yes', 'true', 't', 'y', '1'):
-            return True
-        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-            return False
-        else:
-            raise argparse.ArgumentTypeError('Boolean value expected.')
+    str2bool = Helper_Py3.str2bool
 
     parser = argparse.ArgumentParser(description='Divide the genome into bins and counts the read number',
-                                     epilog="Notes from Xin: if testing on local environment, make sure to activate the 'condense-seq' environment.")
+                                     epilog="Notes from Xin: make sure to activate the 'condense-seq' environment before running.")
     parser.add_argument('-f',
                         dest="fnames",
                         type=str,
@@ -256,68 +232,22 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
-    # get length for each chromosome
-    genome_size = {}
-
     if not args.ref_fname:
         print("Error: there is no reference file input.", file=sys.stderr)
         sys.exit(1)
 
-    for line in Helper_Py3.gzopen(args.ref_fname):
-        line = line.strip()
-        if line.startswith('>'):
-            key = line.split()[0][1:]
-            assert key not in genome_size
-            genome_size[key] = 0
-            continue
-        genome_size[key] += len(line)
-
-    # get GC content of the binned genome
-    def GC_content(seq):
-        seq = seq.upper()
-        output = 0.0
-        for nt in seq:
-            if nt in "GC":
-                output += 1.0
-        return output/len(seq)
-    def add (chr, num, seq, dic):
-        BinID = chr + "_" + str(num)
-        GC = GC_content(seq)
-        assert BinID not in dic
-        dic[BinID] = GC
+    genome_size = Helper_Py3.genome_sizes(args.ref_fname)
 
     win_size = args.win_size
     bin_GC = None
     if args.GC_option:
-        bin_GC = {}
-        for line in Helper_Py3.gzopen(args.ref_fname):
-            line = line.strip()
-            if line.startswith(">"):
-                if len(bin_GC) > 0 and len(seq) > 0:
-                    add(chr, num, seq, bin_GC)
-                chr, num = line.split()[0][1:], 0
-                seq = ""
-                remain = ""
-                continue
-            if len(seq) < win_size:
-                seq += line
-            if len(seq) > win_size:
-                seq, remain = seq[:win_size], seq[win_size:]
-            if len(seq) == win_size:
-                add(chr, num, seq, bin_GC)
-                seq = remain[:]
-                remain = ""
-                num += 1
-        if len(seq) > 0:
-            add(chr, num, seq, bin_GC)    
+        bin_GC = Helper_Py3.bin_gc_from_fasta(args.ref_fname, win_size)
     
     chr_list = []
     if not args.chr_list:
         chr_list = sorted(genome_size.keys(), key=Helper_Py3.chr_key)
     else:
         chr_list = sorted(args.chr_list, key=Helper_Py3.chr_key)
-
-    #print chr_list
 
     bin_count (args.fnames,
                genome_size,

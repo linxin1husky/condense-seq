@@ -1,40 +1,11 @@
-import glob
-import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
-import copy
-import random
-import functools
+import sys
+from argparse import ArgumentParser
 import warnings
 import gzip
+import Helper_Py3_compat as Helper_Py3
 import numpy as np
 from scipy.optimize import curve_fit
 from scipy.optimize import differential_evolution
-
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
-
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rt')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
 
 # 4-parameter logistic function (sigmoid type)
 def sigmoid_func (x, top, rate, chalf, bottom):
@@ -58,26 +29,6 @@ def get_CP (top, hill, chalf, bottom, percent):
     CP = chalf*(((float(top-bottom)/(surv_frac-bottom)) - 1)**(1.0/float(hill)))
     return CP
 
-# read titration file
-def read_titration (fname):
-    tnum_conc = {}
-    tnum_frac = {}
-    for line in gzopen(fname):
-        line = line.strip()
-        if not line:
-            continue
-        cols = line.split('\t')
-        conc, frac, tnum = cols[0], cols[7], cols[-1]
-        try:
-            tnum = int(tnum)
-        except:
-            continue
-        conc = float(conc)
-        frac = float(frac)
-        tnum_conc[tnum] = conc
-        tnum_frac[tnum] = frac
-    return tnum_conc, tnum_frac
-
 def logistic_fit (fnames,
                   tfname,
                   tnums,
@@ -97,7 +48,14 @@ def logistic_fit (fnames,
                   out_fname):
     
     # read titration file
-    tnum_conc, tnum_tfrac = read_titration (tfname)
+    tnum_conc, tnum_tfrac = Helper_Py3.read_titration(
+        tfname,
+        return_conc=True,
+        conc_col=0,
+        frac_col=7,
+        tnum_col=-1,
+        delim="\t",
+    )
 
     # covert titration number to physical concentration
     concs = [tnum_conc[tnum] for tnum in tnums]
@@ -114,33 +72,20 @@ def logistic_fit (fnames,
     rsq_list = []
     total_count, fail_count = 0, 0
     
-    f = gzip.open(out_fname + '_4PL.gtab.gz', 'wt')
+    f = gzip.open(out_fname + '_4PL.gtab.gz', 'wt', encoding='utf-8', newline='\n')
     
     for fname in fnames:
         print("Processing %s" % (fname.rsplit('/', 1)[-1]),
               file=sys.stderr)
         First = True
-        for line in gzopen(fname):
+        for line in Helper_Py3.open_any(fname, "rt"):
             line = line.strip()
             if not line:
                 continue
             cols = line.split()
             
             if First:
-                # find data type and range
-                if cols[1] == "Position":
-                    data_type = 'point'
-                    col_st = 2
-                    col_ed = len(cols)
-                else:
-                    assert cols[1] == 'Start'
-                    assert cols[2] == 'End'
-                    data_type = 'binned'
-                    col_st = 3
-                    try:
-                        col_ed = cols.index('GCcontent')
-                    except:
-                        col_ed = len(cols)
+                _, col_st, col_ed, _ = Helper_Py3.read_gtab_header(cols)
 
                 assert col_ed - col_st == len(tnums)  # data col len == titration num
 
@@ -185,42 +130,42 @@ def logistic_fit (fnames,
             chalf_guess = np.mean(X)
             rate_guess = 1.0
 
-            if min_top == None:
+            if min_top is None:
                 top_min = top_guess * (1-0.01)
             else:
                 top_min = min_top
 
-            if max_top == None:
+            if max_top is None:
                 top_max = top_guess * (1+0.01)
             else:
                 top_max = max_top
 
-            if min_bottom == None:
+            if min_bottom is None:
                 bottom_min = bottom_guess * (1-0.01)
             else:
                 bottom_min = min_bottom
 
-            if max_bottom == None:
+            if max_bottom is None:
                 bottom_max = bottom_guess * (1+0.01)
             else:
                 bottom_max = max_bottom
 
-            if min_chalf == None:
+            if min_chalf is None:
                 chalf_min = min(X)
             else:
                 chalf_min = min_chalf
 
-            if max_chalf == None:
+            if max_chalf is None:
                 chalf_max = max(X)
             else:
                 chalf_max = max_chalf
 
-            if min_rate == None:
+            if min_rate is None:
                 rate_min = 0.0
             else:
                 rate_min = min_rate
 
-            if max_rate == None:
+            if max_rate is None:
                 rate_max = 100.0
             else:
                 rate_max = max_rate
@@ -351,13 +296,7 @@ def logistic_fit (fnames,
     
 
 if __name__ == '__main__':
-    def str2bool(v):
-        if v.lower() in ('yes', 'true', 't', 'y', '1'):
-            return True
-        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-            return False
-        else:
-            raise argparse.ArgumentTypeError('Boolean value expected.')
+    str2bool = Helper_Py3.str2bool
 
     parser = ArgumentParser(description='fitting condense-seq data with four parameter logistic function')
     parser.add_argument(metavar='-f',
@@ -459,11 +398,10 @@ if __name__ == '__main__':
         sys.exit(1)
     
     # list target chromosomes
-    chr_list = []
     if not args.chr_list:
         chr_list = None
     else:
-        chr_list = sorted(args.chr_list, key=functools.cmp_to_key(chr_cmp))
+        chr_list = sorted(args.chr_list, key=Helper_Py3.chr_key)
 
     if args.graph_option:
         import matplotlib.pyplot as plt
