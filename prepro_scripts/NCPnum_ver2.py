@@ -1,34 +1,23 @@
-import sys, argparse 
+import sys, argparse
 import gzip
-import Helper_Py3
+import Helper_Py3_compat as Helper_Py3
 
-# read titration file
-def read_titration (fname, bg=False):
-    all_fracs = {}
-    tnum_tfrac = {}
-    First = True
-    for line in open(fname):
-        if First:
-            First = False
-            continue
-        cols = line.strip().split()
-        try:
-            tnum = int(cols[-1])
-        except:
-            continue
-        total_frac = float(cols[-3])
-        assert tnum not in tnum_tfrac
-        tnum_tfrac[tnum] = total_frac
-    return tnum_tfrac
+def _header_info(cols):
+    data_type, col_st, col_ed, _ = Helper_Py3.read_gtab_header(cols)
+    if data_type == "point":
+        fields = ["Chromosome", "Position"]
+    else:
+        fields = ["Chromosome", "Start", "End"]
+    return col_st, col_ed, fields
 
 def NCP_number (tnum_fnames,
                 tfname,
                 input_mnum,
                 chr_list,
                 out_fname):
-
+    """ Estimate physical number of molecules from coverage/count data and titration information"""
     # read titration file
-    tnum_tfrac = read_titration (tfname)
+    tnum_tfrac = Helper_Py3.read_titration(tfname)
 
     # sort by titration number
     tnums = sorted(tnum_fnames.keys())
@@ -39,7 +28,7 @@ def NCP_number (tnum_fnames,
 
         mnum = input_mnum * tnum_tfrac[tnum] # molecule number of titraion
 
-        # get total of all total coverage/counts
+        # get total of all coverage/counts
         total_covs = []
         fnames = tnum_fnames[tnum]
         for fname in fnames:
@@ -52,27 +41,10 @@ def NCP_number (tnum_fnames,
                     continue
                 cols = line.split()
                 if First:
-                    # set data range
-                    if cols[1] == "Position":
-                        data_type = 'point'
-                        #col_st = 3
-                        col_st = 2
-                        col_ed = len(cols)
+                    col_st, col_ed, _ = _header_info(cols)
+                    if not total_covs:
+                        total_covs = [0] * (col_ed - col_st)
                     else:
-                        assert cols[1] == 'Start'
-                        assert cols[2] == 'End'
-                        data_type = 'binned'
-                        #col_st = 4
-                        col_st = 3
-                        try:
-                            col_ed = cols.index('GCcontent')
-                        except:
-                            col_ed = len(cols)
-                    
-                    if len(total_covs) == 0:
-                        total_covs = [0 for i in range(col_st, col_ed)]
-                    else:
-                        # all files has same data range
                         assert len(total_covs) == col_ed - col_st
                     First = False
                     continue
@@ -83,8 +55,7 @@ def NCP_number (tnum_fnames,
                     continue
 
                 for i in range(col_st, col_ed):
-                    cov = float(cols[i])
-                    total_covs[i-col_st] += cov
+                    total_covs[i - col_st] += float(cols[i])
 
         # convert to molecule number
         for fname in fnames:
@@ -100,24 +71,7 @@ def NCP_number (tnum_fnames,
                     continue
                 cols = line.split()
                 if First:
-                    if cols[1] == "Position":
-                        data_type = 'point'
-                        col_st = 2
-                        col_ed = len(cols)
-                    else:
-                        assert cols[1] == 'Start'
-                        assert cols[2] == 'End'
-                        data_type = 'binned'
-                        col_st = 3
-                        try:
-                            col_ed = cols.index('GCcontent')
-                        except:
-                            col_ed = len(cols)
-
-                    if data_type == 'point':
-                        fields = ['Chromosome', 'Position']
-                    elif data_type == 'binned':
-                        fields = ['Chromosome', 'Start', 'End']                            
+                    col_st, col_ed, fields = _header_info(cols)
                     fields += cols[col_st:col_ed]
                     print('\t'.join(fields), file=f)
                     
@@ -132,9 +86,8 @@ def NCP_number (tnum_fnames,
                 nums = []
                 for i in range(col_st, col_ed):
                     cov = float(cols[i])
-                    frac = float(cov)/total_covs[i-col_st]
-                    num = int(round(mnum * frac))
-                    nums.append(str(num))
+                    frac = cov / total_covs[i - col_st]
+                    nums.append(str(int(round(mnum * frac))))
 
                 print('\t'.join(cols[:col_st] + nums), file=f)
 
@@ -178,7 +131,6 @@ if __name__ == '__main__':
     
     args = parser.parse_args()
 
-
     # map tnum to filenames
     if not args.tnums:
         tnums = range(len(args.fnames_list))
@@ -193,7 +145,6 @@ if __name__ == '__main__':
         tnum_fnames[tnum] = fnames
 
     # list target chromosomes
-    chr_list = []
     if not args.chr_list:
         chr_list = None
     else:

@@ -1,7 +1,7 @@
-import os, sys, subprocess, re
+import sys
 import argparse
 import gzip
-import Helper_Py3
+import Helper_Py3_compat as Helper_Py3
 
 def concatenate (fnames,
                  colnums_list,
@@ -16,7 +16,7 @@ def concatenate (fnames,
 
     for i in range(len(fnames)):
         fname = fnames[i]
-        file = Helper_Py3.gzopen(fname)
+        file = Helper_Py3.open_any(fname, "rt")
         files.append(file)
         file_pts.append(None)
         file_cols.append(None)
@@ -25,10 +25,9 @@ def concatenate (fnames,
 
     # start concatenate the files
     print("Concatenating files", file=sys.stderr)
-    f = gzip.open(out_fname +'.gtab.gz', 'wt', encoding='utf-8')
+    f = gzip.open(out_fname +'.gtab.gz', 'wt', encoding='utf-8', newline='\n')
 
     First = True
-    #ID = 0
     while True:
         # read files line by line but skipping empty line
         for i in range(len(fnames)):
@@ -76,19 +75,7 @@ def concatenate (fnames,
                 colnums = colnums_list[i]
 
                 # check data type and ranges
-                if file_col[1] == "Position":
-                    data_type = 'point'
-                    col_st = 2
-                    col_ed = len(file_col)
-                else:
-                    assert file_col[1] == 'Start'
-                    assert file_col[2] == 'End'
-                    data_type = 'binned'
-                    col_st = 3
-                    try:
-                        col_ed = file_col.index('GCcontent')
-                    except:
-                        col_ed = len(file_col)
+                data_type, col_st, col_ed, _ = Helper_Py3.read_gtab_header(file_col)
 
                 # check the genomic fields
                 if i == 0:
@@ -99,12 +86,12 @@ def concatenate (fnames,
 
                 # select data fields
                 if len(colnums) <=0:
-                    colnums = range(col_st, col_ed)
+                    colnums = list(range(col_st, col_ed))
                     
                 fields = [file_col[colnum] for colnum in colnums]
                 fields_list += fields
 
-            print('\t'.join(fields_list), file=sys.stderr)
+            print('\t'.join(fields_list), file=f)
             First = False
             continue
 
@@ -150,7 +137,7 @@ def concatenate (fnames,
         row += [str(value) for value in data_pt[1:]]
         row += data_list
         
-        print('\t'.join(row), file=sys.stderr)
+        print('\t'.join(row), file=f)
         #ID +=1
 
     f.close()
@@ -158,14 +145,6 @@ def concatenate (fnames,
 
 
 if __name__ == '__main__':
-    def str2bool(v):
-        if v.lower() in ('yes', 'true', 't', 'y', '1'):
-            return True
-        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-            return False
-        else:
-            raise argparse.ArgumentTypeError('Boolean value expected.')
-
     parser = argparse.ArgumentParser(description='concatenate gtab files')
     parser.add_argument('-f',
                         dest="fnames",

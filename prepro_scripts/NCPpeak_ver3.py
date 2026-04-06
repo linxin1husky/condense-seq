@@ -1,7 +1,7 @@
 import sys, subprocess, re
 import argparse
 import gzip
-import Helper_Py3
+import Helper_Py3_compat as Helper_Py3
 
 def NCP_peak (fnames,
               min_len,
@@ -39,8 +39,7 @@ def NCP_peak (fnames,
                 continue
 
             cols = line.strip().split()
-            read_id, flag, ref_id, pos, mapQ, cigar_str = cols[:6]
-            read_id=":".join(read_id.split(':')[3:7])
+            _, flag, ref_id, pos, _, cigar_str = cols[:6]
             
             tlen = int(cols[8])
             flag, pos = int(flag), int(pos)
@@ -255,14 +254,6 @@ def NCP_peak (fnames,
     
 
 if __name__ == '__main__':
-    def str2bool(v):
-        if v.lower() in ('yes', 'true', 't', 'y', '1'):
-            return True
-        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-            return False
-        else:
-            raise argparse.ArgumentTypeError('Boolean value expected.')
-
     parser = argparse.ArgumentParser(description='Calling NCP peaks and scores')
     parser.add_argument('-f',
                         dest="fnames",
@@ -296,7 +287,7 @@ if __name__ == '__main__':
                         help='maximum allowed overlap between NCPS in bp')
     parser.add_argument('--skip',
                         dest="skip_zero",
-                        type=str2bool,
+                        type=Helper_Py3.str2bool,
                         nargs='?',
                         const=True,
                         default=False,

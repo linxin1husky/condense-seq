@@ -1,43 +1,6 @@
-import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
-import math
-import copy
-import gzip
-
-# chromosome comparison sort
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
-
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rb')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
-
-# get the reverse complementary of sequence
-def rev_cmp (seq):
-    dic={'A':'T', 'T':'A', 'C':'G', 'G':'C', 'N':'N'}
-    output=''
-    for nt in seq:
-        output+=dic[nt]
-    return output[::-1]
+import sys, math, copy, gzip
+from argparse import ArgumentParser
+import Helper_Py3_compat as Helper_Py3
 
 # get AT content of sequence
 def AT_content(seq):
@@ -56,7 +19,7 @@ def C_motif (seq, motif='CG', both=True):
         if seq[i:i+2] == motif:
             num += 1
     if both:
-        rev_seq = rev_cmp(seq)
+        rev_seq = Helper_Py3.rev_cmp(seq)
         for i in range(len(rev_seq)-1):
             if rev_seq[i:i+2] == motif:
                 num +=1
@@ -65,7 +28,7 @@ def C_motif (seq, motif='CG', both=True):
 def binary_search (sortlist, target):
     st, ed = 0, len(sortlist)-1
     while st <= ed:
-        mid = (st+ed) / 2
+        mid = (st+ed) // 2
         if sortlist[mid] == target:
             return mid
         elif sortlist[mid] > target:
@@ -73,19 +36,6 @@ def binary_search (sortlist, target):
         elif sortlist[mid] < target:
             st = mid + 1
     return st
-
-def tuple_cmp (a,b):
-    if a[0] < b[0]:
-        return -1
-    elif a[0] > b[0]:
-        return 1
-    else:
-        if a[1] < b[1]:
-            return -1
-        elif a[1] > b[1]:
-            return 1
-        else:
-            return 0
 
 # simple hash function when binning size/step is constant
 class bin_hash:
@@ -108,16 +58,16 @@ class bin_hash:
             st, ed = ID_interval[ID]
             assert st % self.bin_step == 0
             assert ed == st + self.bin_size
-            idx = st / self.bin_step
+            idx = st // self.bin_step
             assert idx not in self.idx_ID
             self.idx_ID[idx] = ID
             self.ID_idx[ID] = idx
             
-        print >> sys.stderr, "hash function is built"
+        print("hash function is built", file=sys.stderr)
         
     def find(self, pos):
         find_IDs = []
-        idx = pos / self.bin_step
+        idx = pos // self.bin_step
         st = self.bin_step*idx
         ed = st + self.bin_size
         while pos >= st and pos < ed:
@@ -144,7 +94,7 @@ class bin_hash:
     def find_range(self, rst, red):
         find_IDs = []
 
-        idx = rst / self.bin_step
+        idx = rst // self.bin_step
         min_idx = idx
         st = self.bin_step*idx
         ed = st + self.bin_size
@@ -158,7 +108,7 @@ class bin_hash:
             ed = st + self.bin_size
 
         red = min(red, self.max_pos + 1)
-        max_idx = (red - 1) / self.bin_step
+        max_idx = (red - 1) // self.bin_step
 
         for idx in range(min_idx, max_idx+1):
             try:
@@ -208,7 +158,7 @@ class double_hash:
         for ID, interval in ID_interval.items():
             st, ed = interval
             edID.append([ed, ID])
-        edID = sorted(edID, cmp=tuple_cmp)
+        edID = sorted(edID, key=lambda x: (x[0], x[1]))
 
         edlist, IDlist = [], []
         for ed, ID in edID:
@@ -220,26 +170,26 @@ class double_hash:
         self.domain_IDs = {}
         self.domain_num = max_pos // domain_size + 1
         
-        for i in xrange(self.domain_num):
+        for i in range(self.domain_num):
             self.domain_IDs[i] = []
             dst = i * self.domain_size
             ded = min(dst + self.domain_size, max_pos+1)
             idx1 = binary_search(edlist, dst)
             if idx1 == len(edlist):
                 continue
-            for j in xrange(idx1, len(edlist)):
+            for j in range(idx1, len(edlist)):
                 ID = IDlist[j]
                 st, ed = self.ID_interval[ID]
                 if st < ded:
                     self.domain_IDs[i].append(ID)
                 
-        print >> sys.stderr, "hash function is built"
+        print("hash function is built", file=sys.stderr)
 
     def __str__ (self):
-        print "%s\t%s\t%s\t%s" % ("ID", "st", "ed", "value")
+        print("%s\t%s\t%s\t%s" % ("ID", "st", "ed", "value"))
         for ID, value in self.ID_value.items():
-            st, ed = ID_interval[ID]
-            print "%d\t%d\t%d\t%f" % (ID, st, ed, value)
+            st, ed = self.ID_interval[ID]
+            print("%d\t%d\t%d\t%f" % (ID, st, ed, value))
         return
 
     def find (self, pos):
@@ -252,7 +202,7 @@ class double_hash:
         for ID in IDs:
             st, ed  = self.ID_interval[ID]
             edID.append([ed,ID])
-        edID = sorted(edID, cmp=tuple_cmp)
+        edID = sorted(edID, key=lambda x: (x[0], x[1]))
 
         edlist, IDlist = [], []
         for ed, ID in edID:
@@ -263,7 +213,7 @@ class double_hash:
         if idx == len(edlist):
             return find_IDs
 
-        for i in xrange(idx, len(edlist)):
+        for i in range(idx, len(edlist)):
             ID = IDlist[i]
             st, ed = self.ID_interval[ID]
             if pos >= st and pos < ed:
@@ -285,7 +235,7 @@ class double_hash:
         domain2 = red // self.domain_size
 
         IDs = set([])
-        for i in xrange(domain1, domain2 + 1):
+        for i in range(domain1, domain2 + 1):
             IDs |= set(self.domain_IDs[i])
         IDs = list(IDs)
 
@@ -293,7 +243,7 @@ class double_hash:
         for ID in IDs:
             st, ed = self.ID_interval[ID]
             edID.append([ed, ID])
-        edID = sorted(edID, cmp=tuple_cmp)
+        edID = sorted(edID, key=lambda x: (x[0], x[1]))
 
         edlist, IDlist = [], []
         for ed, ID in edID:
@@ -304,7 +254,7 @@ class double_hash:
         if idx1 == len(edlist):
             return find_IDs
         
-        for j in xrange(idx1, len(edlist)):
+        for j in range(idx1, len(edlist)):
             ID = IDlist[j]
             st, ed = self.ID_interval[ID]
             if st < red:
@@ -349,7 +299,7 @@ def read_gtab (fname,
 
     First = True
     data_type = None
-    for line in gzopen(fname):
+    for line in Helper_Py3.open_any(fname, "rt"):
         line = line.strip()
 
         if not line:
@@ -357,19 +307,7 @@ def read_gtab (fname,
 
         cols = line.split('\t')
         if First:
-            if cols[1] == 'Position':
-                data_type = 'point'
-                col_st = 2
-                col_ed = len(cols)
-            else:
-                assert cols[1] == 'Start'
-                assert cols[2] == 'End'
-                data_type = 'binned'
-                col_st = 3
-                try:
-                    col_ed = cols.index('GCcontent')
-                except:
-                    col_ed = len(cols)
+            data_type, col_st, col_ed, _ = Helper_Py3.read_gtab_header(cols)
 
             field_names = cols[col_st:col_ed]
             field_idxs = range(col_st, col_ed)
@@ -421,11 +359,11 @@ def get_seq_from_FASTA (fasta_fname,
                         chr_ID_win,
                         mode='fullseq'):
     
-    chrs = sorted(chr_ID_win.keys(), cmp=chr_cmp)
+    chrs = sorted(chr_ID_win.keys(), key=Helper_Py3.chr_key)
     #print chrs
     Find = False
     chr_ID_seq = {}
-    for line in gzopen(fasta_fname):
+    for line in Helper_Py3.open_any(fasta_fname, "rt"):
         line = line.strip()
         if line.startswith(">"):
             if Find:
@@ -514,7 +452,7 @@ def get_seq_from_FASTA (fasta_fname,
         assert chr not in chr_ID_seq
         chr_ID_seq[chr] = ID_seq
 
-    #print sorted(chr_ID_seq.keys(), cmp=chr_cmp)
+    #print sorted(chr_ID_seq.keys(), key=Helper_Py3.chr_key)
     assert len(chrs) == len(chr_ID_seq)
     return chr_ID_seq
 
@@ -524,7 +462,7 @@ def bin_BS_file (fnames, chr_intdict):
     chr_ID_C = {} # num of "detected" C in the target motif
 
     for fname in fnames:
-        for line in gzopen(fname):
+        for line in Helper_Py3.gzopen(fname):
             cols = line.strip().split()
             chrname, st, ed, _, _, strand, _, _, _, reads, frac = cols[:11]
 
@@ -556,7 +494,7 @@ def bin_BS_file (fnames, chr_intdict):
 # read chip-seq data (ENCODE peak-bed file) and get signal for each bin
 def bin_chip_file (fnames, chr_intdict, unit='signal'):
     for fname in fnames:        
-        for line in gzopen(fname):
+        for line in Helper_Py3.gzopen(fname):
             cols = line.strip().split()
             chrname, st, ed, peakname, _, strand, signal, pvalue, qvalue = cols[:9]
 
@@ -585,7 +523,7 @@ def bin_chip_file (fnames, chr_intdict, unit='signal'):
 # read bedgraph file and get value for each bin
 def bin_bedgraph_file (fnames, chr_intdict):
     for fname in fnames:
-        for line in gzopen(fname):
+        for line in Helper_Py3.gzopen(fname):
             if not line.startswith('chr'):
                 continue
             cols = line.strip().split()
@@ -610,7 +548,7 @@ def bin_bedgraph_file (fnames, chr_intdict):
 def bin_gtab (fnames, chr_intdict):
     for fname in fnames:
         First = True
-        for line in gzopen(fname):
+        for line in Helper_Py3.gzopen(fname):
             cols = line.split('\t')
             if First:
                 if cols[1] == 'Position':
@@ -675,8 +613,8 @@ def make_table(data_fname,
             chr, st, ed = ID
         except:
             chr, pos = ID
-            st = pos - bin_size/2
-            ed = pos + bin_size/2
+            st = pos - bin_size // 2
+            ed = pos + bin_size // 2
 
             if bin_size % 2 != 0:
                 ed +=1
@@ -685,8 +623,8 @@ def make_table(data_fname,
             chr_ID_win[chr] = {}
         chr_ID_win[chr][ID] = (st, ed)
 
-    chr_list = sorted(chr_ID_win.keys(), cmp=chr_cmp)
-    print >> sys.stderr, "data gtab file reading is done"
+    chr_list = sorted(chr_ID_win.keys(), key=Helper_Py3.chr_key)
+    print("data gtab file reading is done", file=sys.stderr)
 
     # extract sequence information for each bin
     if full_seq:
@@ -698,21 +636,21 @@ def make_table(data_fname,
                                        chr_ID_win,
                                        mode='ATcontent')
         
-    print >> sys.stderr, "reference reading is done"
+    print("reference reading is done", file=sys.stderr)
     
     # build interval dictionary for each chromosome
     chr_intdict = {}
     if len(bs_fnames) + len(chip_fnames) + len(bg_fnames) + len(gtab_fnames)> 0:
-        print >> sys.stderr, "building interval dictionary"
+        print("building interval dictionary", file=sys.stderr)
         for chr in chr_list:
-            print >> sys.stderr, "%s" % (chr)
+            print("%s" % (chr), file=sys.stderr)
             if bin_step:
                 Int_dict = bin_hash(chr_ID_win[chr],
                                     bin_size,
                                     bin_step,
                                     genome_size[chr])
             else:
-                domain_size = 10**(int(math.log10(genome_size[chr]))/2)
+                domain_size = 10**(int(math.log10(genome_size[chr])) // 2)
                 Int_dict = double_hash(chr_ID_win[chr],
                                        domain_size,
                                        genome_size[chr])
@@ -729,7 +667,7 @@ def make_table(data_fname,
             bs_chr_ID_C[bs] = chr_ID_C
             bs_chr_ID_meC[bs] = chr_ID_meC
             del chr_intdict_copy, chr_ID_C, chr_ID_meC
-            print >> sys.stderr, "%s BS reading is done" % (bs)
+            print("%s BS reading is done" % (bs), file=sys.stderr)
 
     # read chip-seq data (ENCODE peak-bed file) and get value for each bin
     chip_chr_ID_value = {}
@@ -740,7 +678,7 @@ def make_table(data_fname,
             chr_ID_value = bin_chip_file(fnames, chr_intdict_copy)
             chip_chr_ID_value[chip] = chr_ID_value
             del chr_intdict_copy, chr_ID_value
-            print >> sys.stderr, "%s Chip reading is done" % (chip)
+            print("%s Chip reading is done" % (chip), file=sys.stderr)
 
     # read bedgraph file and get value for each bin
     bg_chr_ID_value = {}
@@ -751,7 +689,7 @@ def make_table(data_fname,
             chr_ID_value = bin_bedgraph_file(fnames, chr_intdict_copy)
             bg_chr_ID_value[bg] = chr_ID_value
             del chr_intdict_copy, chr_ID_value
-            print >> sys.stderr, "%s Bedgraph reading is done" % (bg)
+            print("%s Bedgraph reading is done" % (bg), file=sys.stderr)
 
     # read gtab file and get value for each bin
     gtab_chr_ID_value = {}
@@ -762,14 +700,12 @@ def make_table(data_fname,
             chr_ID_value = bin_gtab(fnames, chr_intdict_copy)
             gtab_chr_ID_value[gtab] = chr_ID_value
             del chr_intdict_copy, chr_ID_value
-            print >> sys.stderr, "%s gtab reading is done" % (gtab)
+            print("%s gtab reading is done" % (gtab), file=sys.stderr)
 
     del chr_intdict
 
-    #start = time.time()
-
     # write annotation file
-    print >> sys.stderr, "writing annotation table file"
+    print("writing annotation table file", file=sys.stderr)
 
     f = gzip.open(out_fname + '_table.gtab.gz', 'wb')
     if data_type == 'point':
@@ -800,7 +736,7 @@ def make_table(data_fname,
     gtab_names = sorted(gtab_chr_ID_value.keys())
     for gtab in gtab_names:
         s += '\t' + gtab
-    print >> f, s
+    print(s, file=f)
 
 
     for chr in chr_list:
@@ -864,21 +800,13 @@ def make_table(data_fname,
                     value = 0.0
                 s += '\t' + str(value)
 
-            print >> f, s
+            print(s, file=f)
 
     f.close()
 
-    print >> sys.stderr, "Done"
+    print("Done", file=sys.stderr)
     
 if __name__ == '__main__':
-    def str2bool(v):
-        if v.lower() in ('yes', 'true', 't', 'y', '1'):
-            return True
-        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-            return False
-        else:
-            raise argparse.ArgumentTypeError('Boolean value expected.')
-
     parser = ArgumentParser(description='Make annotation table by putting together gtab file with other epigenetic data')
     parser.add_argument(metavar='-f',
                         dest="data_fname",
@@ -924,7 +852,7 @@ if __name__ == '__main__':
                         help='gtab files (order: name, gtab files)')
     parser.add_argument('--full-seq',
                         dest="full_seq",
-                        type=str2bool,
+                        type=Helper_Py3.str2bool,
                         nargs='?',
                         const=True,
                         default=False,
@@ -943,27 +871,18 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # get length for each chromosome
-    genome_size = {}
-    for line in gzopen(args.ref_fname):
-        line = line.strip()
-        if line.startswith('>'):
-            key = line.split()[0][1:]
-            assert key not in genome_size
-            genome_size[key] = 0
-            continue
-        genome_size[key] += len(line)
+    genome_size = Helper_Py3.genome_sizes(args.ref_fname)
 
-    chr_list = []
     if not args.chr_list:
-        chr_list = sorted(genome_size.keys(), cmp=chr_cmp)
+        chr_list = sorted(genome_size.keys(), key=Helper_Py3.chr_key)
     else:
-        chr_list = sorted(args.chr_list, cmp=chr_cmp)
+        chr_list = sorted(args.chr_list, key=Helper_Py3.chr_key)
 
     bs_fnames = {}
     if args.bs_fnames:
         for bs_fname in args.bs_fnames:
             if len(bs_fname) <= 1:
-                print >> sys.stderr, "need name and file information"
+                print("need name and file information", file=sys.stderr)
                 sys.exit(1)
             bs, fnames = bs_fname[0], bs_fname[1:]
             assert bs not in bs_fnames
@@ -973,7 +892,7 @@ if __name__ == '__main__':
     if args.chip_fnames:
         for chip_fname in args.chip_fnames:
             if len(chip_fname) <= 1:
-                print >> sys.stderr, "need name and file information"
+                print("need name and file information", file=sys.stderr)
                 sys.exit(1)
             chip, fnames = chip_fname[0], chip_fname[1:]
             assert chip not in chip_fnames
@@ -983,7 +902,7 @@ if __name__ == '__main__':
     if args.bg_fnames:
         for bg_fname in args.bg_fnames:
             if len(bg_fname) <= 1:
-                print >> sys.stderr, "need name and file information"
+                print("need name and file information", file=sys.stderr)
                 sys.exit(1)
             bg, fnames = bg_fname[0], bg_fname[1:]
             assert bg not in bg_fnames
@@ -993,7 +912,7 @@ if __name__ == '__main__':
     if args.gtab_fnames:
         for gtab_fname in args.gtab_fnames:
             if len(gtab_fname) <= 1:
-                print >> sys.stderr, "need name and file information"
+                print("need name and file information", file=sys.stderr)
                 sys.exit(1)
             gtab, fnames = gtab_fname[0], gtab_fname[1:]
             assert gtab not in gtab_fnames

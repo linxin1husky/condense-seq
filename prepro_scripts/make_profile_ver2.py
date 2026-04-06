@@ -1,42 +1,6 @@
-import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
-import math
-import copy
-import gzip
-
-# chromosome comparison sort
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
-
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rb')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
-
-def rev_cmp (seq):
-    dic={'A':'T', 'T':'A', 'C':'G', 'G':'C', 'N':'N'}
-    output=''
-    for nt in seq:
-        output+=dic[nt]
-    return output[::-1]
+import sys, math, copy, gzip
+from argparse import ArgumentParser
+import Helper_Py3_compat as Helper_Py3
 
 def remap_pos (pos, st, ed, new_st, new_ed):
     new_pos = new_st + (new_ed - new_st) * float(pos - st)/(ed - st) 
@@ -94,7 +58,7 @@ def NN_interpolate (raw_data_list):
 def read_hgtable(fname, chr_list, mode='gene'):
     ID_field_values = {}   
     First = True
-    for line in gzopen(fname):
+    for line in Helper_Py3.open_any(fname, "rt"):
         cols = line.strip().split()
         if First:
             First = False
@@ -146,7 +110,7 @@ def read_hgtable(fname, chr_list, mode='gene'):
 # read GTF file (updated for new GTF format)
 def read_GTF (fname, chr_list=None, mode="gene", strip_ver=True):
     ID_field_values = {}
-    for line in gzopen(fname):
+    for line in Helper_Py3.open_any(fname, "rt"):
         if line.startswith("#"):
             continue
         cols = line.strip().split('\t')
@@ -265,7 +229,7 @@ def Profiling (data_fname,
                out_fname):
 
     # reading genomic region file
-    print >> sys.stderr, "reading genomic region file"
+    print("reading genomic region file", file=sys.stderr)
     file_type = region_fname.split('.')[-1]
     if file_type == 'table':
         ID_field_values = read_hgtable(region_fname, chr_list, mode='gene')
@@ -361,8 +325,8 @@ def Profiling (data_fname,
     new_intervals['-'] = [(0, right_len), (right_len, profile_len-left_len), (profile_len-left_len, profile_len)]            
 
     # start writing profile file
-    print >> sys.stderr, "writing profile file"
-    f = gzip.open(out_fname + '_profile.txt.gz', 'wb')
+    print("writing profile file", file=sys.stderr)
+    f = gzip.open(out_fname + '_profile.txt.gz', 'wt', encoding='utf-8', newline='\n')
     s = 'Sample\tID\tFeature\tChromosome\tPosition\tStrand'
     a, b, c, d = 0, left_len, profile_len-right_len, profile_len
     for i in range(b-a):
@@ -371,10 +335,10 @@ def Profiling (data_fname,
         s += '\t' + str(i-b) + 'D'
     for i in range(d-c):
         s += '\t' + str(i+1)
-    print >> f, s
+    print(s, file=f)
     
     # read input data file
-    print >> sys.stderr, "reading input data gtab file"
+    print("reading input data gtab file", file=sys.stderr)
     data_type = None
     col_st = None
     stpt, edpt = 0, 0
@@ -382,25 +346,17 @@ def Profiling (data_fname,
     ID_domain = {}
     First = True
     order = None
-    for line in gzopen(data_fname):
+    for line in Helper_Py3.open_any(data_fname, "rt"):
         cols = line.strip().split()
         if First:
-            # find data type and range
-            if cols[1] == "Position":
-                data_type = 'point'
-                col_st = 2
-            else:
-                assert cols[1] == 'Start'
-                assert cols[2] == 'End'
-                data_type = 'binned'
-                col_st = 3
+            _, col_st, _, _ = Helper_Py3.read_gtab_header(cols)
+            data_type = 'point' if col_st == 2 else 'binned'
             labels = cols[col_st:]
             First = False
             continue
 
         if data_type == 'point':
-            chr, st, ed = cols[0], int(cols[1]), int(cols[1])
-            ed +=1
+            chr, st, ed = cols[0], int(cols[1]), int(cols[1]) + 1
         else:
             chr, st, ed = cols[0], int(cols[1]), int(cols[2])
 
@@ -409,7 +365,7 @@ def Profiling (data_fname,
 
         if prev_chr != chr:
             while len(ID_domain) > 0:
-                ID = ID_domain.keys().pop()
+                ID = next(iter(ID_domain))
                 domain = ID_domain[ID]
                 del ID_domain[ID]
                 ID, feature_choice, chr, position, strand = chr_ID_info[chr][ID]
@@ -428,17 +384,17 @@ def Profiling (data_fname,
                         value = profile[u]
                         s += str(value) + "\t"
                     s += str(profile[-1])
-                    print >> f, s
+                    print(s, file=f)
             stpt = 0 
             edpt = 0
             prev_chr = chr
             order = None
 
         if order == None:
-            print >> sys.stderr, chr + " pos " + str(st) +" is reading"
+            print(chr + " pos " + str(st) +" is reading", file=sys.stderr)
             order = int(math.log10(max(st, 1)))
         elif int(math.log10(max(st, 1))) > order:
-            print >> sys.stderr, chr + " pos " + str(st) +" is reading"
+            print(chr + " pos " + str(st) +" is reading", file=sys.stderr)
             order += 1
 
         while stpt < len(chr_start[chr]) and ed > chr_start[chr][stpt]:
@@ -471,7 +427,7 @@ def Profiling (data_fname,
                     value = profile[u]
                     s += str(value) + "\t"
                 s += str(profile[-1])
-                print >> f, s
+                print(s, file=f)
 
         if len(ID_domain) <= 0:
             continue
@@ -538,7 +494,7 @@ def Profiling (data_fname,
                         ID_domain[ID][i][idx].append(count)
 
     while len(ID_domain) > 0:
-        ID = ID_domain.keys().pop()
+        ID = next(iter(ID_domain))
         domain = ID_domain[ID]
         del ID_domain[ID]
         ID, feature_choice, chr, position, strand = chr_ID_info[chr][ID]
@@ -557,21 +513,13 @@ def Profiling (data_fname,
                 value = profile[u]
                 s += str(value) + "\t"
             s += str(profile[-1])
-            print >> f, s
+            print(s, file=f)
             
     f.close()
 
-    print >> sys.stderr, "Done"
+    print("Done", file=sys.stderr)
 
 if __name__ == '__main__':
-    def str2bool(v):
-        if v.lower() in ('yes', 'true', 't', 'y', '1'):
-            return True
-        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-            return False
-        else:
-            raise argparse.ArgumentTypeError('Boolean value expected.')
-
     parser = ArgumentParser(description='Make data profiles projected on the gene annotation')
     parser.add_argument(metavar='--data',
                         dest="data_fname",
@@ -616,14 +564,14 @@ if __name__ == '__main__':
                         help='down stream window size (default: 2kb)')
     parser.add_argument('--interpolate',
                         dest="interpolate",
-                        type=str2bool,
+                        type=Helper_Py3.str2bool,
                         nargs='?',
                         const=True,
                         default=False,
                         help='smoothing the profile by NN-interpolation')
     parser.add_argument('--skip',
                         dest="skip_zero",
-                        type=str2bool,
+                        type=Helper_Py3.str2bool,
                         nargs='?',
                         const=True,
                         default=False,
@@ -637,26 +585,16 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # get length for each chromosome
-    genome_size = {}
-
     if not args.ref_fname:
-        print >> sys.stderr, "Error: there is no reference file input."
+        print("Error: there is no reference file input.", file=sys.stderr)
         sys.exit(1)
 
-    for line in gzopen(args.ref_fname):
-        line = line.strip()
-        if line.startswith('>'):
-            key = line.split()[0][1:]
-            assert key not in genome_size
-            genome_size[key] = 0
-            continue
-        genome_size[key] += len(line)
+    genome_size = Helper_Py3.genome_sizes(args.ref_fname)
 
-    chr_list = []
     if not args.chr_list:
-        chr_list = sorted(genome_size.keys(), cmp=chr_cmp)
+        chr_list = sorted(genome_size.keys(), key=Helper_Py3.chr_key)
     else:
-        chr_list = sorted(args.chr_list, cmp=chr_cmp)
+        chr_list = sorted(args.chr_list, key=Helper_Py3.chr_key)
 
     profile_len = args.profile_len
     

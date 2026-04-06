@@ -2,26 +2,7 @@ import os, sys, subprocess, re
 import argparse
 import math
 import gzip
-import Helper_Py3
-
-# read titration file
-def read_titration (fname, bg=False):
-    all_fracs = {}
-    tnum_tfrac = {}
-    First = True
-    for line in open(fname):
-        if First:
-            First = False
-            continue
-        cols = line.strip().split()
-        try:
-            tnum = int(cols[-1])
-        except:
-            continue
-        total_frac = float(cols[-3])
-        assert tnum not in tnum_tfrac
-        tnum_tfrac[tnum] = total_frac
-    return tnum_tfrac
+import Helper_Py3_compat as Helper_Py3
 
 # metric for condensability
 def get_score (test, control, metric):
@@ -48,7 +29,7 @@ def NCP_score (fnames_list,
 
     if numc_choice:
         # read titration file
-        tnum_tfrac = read_titration (tfname)
+        tnum_tfrac = Helper_Py3.read_titration(tfname)
 
     # first-loop: get total coverage/counts for normalization
     # second-loop: compute condensabilty scores
@@ -168,23 +149,10 @@ def NCP_score (fnames_list,
                         break
 
                     if First:
-                        if test_cols[1] == "Position":
-                            data_type = 'point'
-                            #col_st = 3
-                            col_st = 2
-                            col_ed = len(test_cols)
-                        else:
-                            assert test_cols[1] == 'Start'
-                            assert test_cols[2] == 'End'
-                            data_type = 'binned'
-                            #col_st = 4
-                            col_st = 3
-                            try:
-                                col_ed = test_cols.index('GCcontent')
-                            except:
-                                col_ed = len(test_cols)
-
-                        assert test_cols[:col_st] == control_cols[:col_st] # same field
+                        data_type, col_st, col_ed, _ = Helper_Py3.read_gtab_header(test_cols)
+                        _, control_col_st, control_col_ed, _ = Helper_Py3.read_gtab_header(control_cols)
+                        assert test_cols[:col_st] == control_cols[:control_col_st]  # same field
+                        assert col_st == control_col_st and col_ed == control_col_ed
 
                         if u == 0:
                             if len(total_covs) == 0:
@@ -309,14 +277,6 @@ def NCP_score (fnames_list,
 
 
 if __name__ == '__main__':
-    # def str2bool(v):
-    #     if v.lower() in ('yes', 'true', 't', 'y', '1'):
-    #         return True
-    #     elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-    #         return False
-    #     else:
-    #         raise argparse.ArgumentTypeError('Boolean value expected.')
-
     parser = argparse.ArgumentParser(description='Get condensability scores')
     parser.add_argument('-f',
                         dest="fnames_list",

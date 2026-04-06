@@ -1,41 +1,7 @@
-import os, sys, subprocess, re
-from argparse import ArgumentParser, FileType
-import math
-import copy
+import sys, subprocess, re
+from argparse import ArgumentParser
 import gzip
-
-def chr_cmp (chr_name1, chr_name2):
-    assert chr_name1.startswith('chr')
-    assert chr_name2.startswith('chr')
-    chr_num1 = chr_name1[3:]
-    try:
-        chr_num1 = int(chr_num1)
-    except:
-        pass
-    chr_num2 = chr_name2[3:]
-    try:
-        chr_num2 = int(chr_num2)
-    except:
-        pass
-    if chr_num1 < chr_num2:
-        return -1
-    elif chr_num1 > chr_num2:
-        return 1
-    return 0
-
-def gzopen (fname):
-    if fname.endswith('.gz'):
-        reading_file = gzip.open(fname, 'rb')
-    else:
-        reading_file = open(fname, 'r')
-    return reading_file
-
-def rev_cmp (seq):
-    dic={'A':'T', 'T':'A', 'C':'G', 'G':'C', 'N':'N'}
-    output=''
-    for nt in seq:
-        output+=dic[nt]
-    return output[::-1]
+import Helper_Py3_compat as Helper_Py3
 
 def read_count (fnames,
                 genome_size,
@@ -59,9 +25,13 @@ def read_count (fnames,
     for i in range(len(data)):
         name = label[i]
         filename = data[i]
-        print >> sys.stderr, "reading %s" % (filename)
-        samtools_cmd = ["samtools",  "view", "-F 0x10", filename]
-        samtools_proc = subprocess.Popen(samtools_cmd, stdout=subprocess.PIPE, stderr=open("/dev/null", 'w'))
+        print("reading %s" % (filename), file=sys.stderr)
+        samtools_proc = subprocess.Popen(
+            ["samtools", "view", "-F 0x10", filename],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+        )
 
         for line in samtools_proc.stdout:
             # skip the header
@@ -69,8 +39,7 @@ def read_count (fnames,
                 continue
             
             cols = line.strip().split()
-            read_id, flag, ref_id, pos, mapQ, cigar_str = cols[:6]
-            read_id=":".join(read_id.split(':')[3:7])
+            _, flag, ref_id, pos, _, cigar_str = cols[:6]
 
             tlen = int(cols[8])
             flag, pos = int(flag), int(pos)
@@ -129,14 +98,14 @@ def read_count (fnames,
             else: # right read
                 end_pos = pos
                 cigar_str=re.split('(\d+)',cigar_str)[1:]
-                for i in range(len(cigar_str)/2):
+                for i in range(len(cigar_str)//2):
                     s = cigar_str[2*i+1]
                     num = int(cigar_str[2*i])
                     if s == 'M' or s == 'D':
                         end_pos += num
                 pos = end_pos + tlen
 
-            mid_pos = (pos + end_pos)/2
+            mid_pos = (pos + end_pos) // 2
 
             # record mid positions of reads
             if ref_id not in chr_profile:
@@ -148,15 +117,15 @@ def read_count (fnames,
             chr_profile[ref_id][mid_pos][name] += 1
             
     # summarize the output
-    print >> sys.stderr, "writing read count file"
+    print("writing read count file", file=sys.stderr)
     
-    f = gzip.open(out_fname + '_count.gtab.gz', 'wb')
+    f = gzip.open(out_fname + '_count.gtab.gz', 'wt', encoding='utf-8')
     s = 'Chromosome\tPosition'
     for i in range(len(label)):
         s += '\t' + label[i]
-    print >> f, s
+    print(s, file=f)
 
-    for chr in sorted(chr_profile.keys(), cmp=chr_cmp):
+    for chr in sorted(chr_profile.keys(), key=Helper_Py3.chr_key):
         for i in sorted(chr_profile[chr]):
             counts = []
             for j in range(len(label)):
@@ -170,21 +139,13 @@ def read_count (fnames,
                 continue
             s = chr + "\t" + str(i) + '\t'
             s += '\t'.join([str(round(count*scale, 5)) for count in counts])
-            print >> f, s
+            print(s, file=f)
         
     f.close()
-    print >> sys.stderr, "Done"
+    print("Done", file=sys.stderr)
         
 
 if __name__ == '__main__':
-    def str2bool(v):
-        if v.lower() in ('yes', 'true', 't', 'y', '1'):
-            return True
-        elif v.lower() in ('no', 'false', 'f', 'n', '0'):
-            return False
-        else:
-            raise argparse.ArgumentTypeError('Boolean value expected.')
-
     parser = ArgumentParser(description='Count reads along the genome')
     parser.add_argument(metavar='-f1',
                         dest="fnames",
@@ -211,7 +172,7 @@ if __name__ == '__main__':
                         dest="max_len",
                         type=int,
                         nargs='?',
-                        default=sys.maxint,
+                        default=sys.maxsize,
                         const=170,
                         help='maximum length for selection in bp')
     parser.add_argument('--chr',
@@ -233,34 +194,26 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # get length for each chromosome
-    genome_size = {}
     if not args.ref_fname:
-        print >> sys.stderr, "Error: there is no reference file input."
+        print("Error: there is no reference file input.", file=sys.stderr)
         sys.exit(1)
         
-    for line in gzopen(args.ref_fname):
-        line = line.strip()
-        if line.startswith('>'):
-            key = line.split()[0][1:]
-            assert key not in genome_size
-            genome_size[key] = 0
-            continue
-        genome_size[key] += len(line)
+    genome_size = Helper_Py3.genome_sizes(args.ref_fname)
 
-    chr_list = []
     if not args.chr_list:
-        chr_list = sorted(genome_size.keys(), cmp=chr_cmp)
+        chr_list = sorted(genome_size.keys(), key=Helper_Py3.chr_key)
     else:
-        chr_list = sorted(args.chr_list, cmp=chr_cmp)
+        chr_list = sorted(args.chr_list, key=Helper_Py3.chr_key)
 
     #print chr_list
 
-    read_count (args.fnames,
-                genome_size,
-                args.min_len,
-                args.max_len,
-                args.mm_cutoff,
-                chr_list,
-                args.scale,
-                args.out_fname
-                )
+    read_count(
+        args.fnames,
+        genome_size,
+        args.min_len,
+        args.max_len,
+        args.mm_cutoff,
+        chr_list,
+        args.scale,
+        args.out_fname,
+    )
