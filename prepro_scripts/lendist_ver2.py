@@ -1,6 +1,14 @@
-import sys, subprocess
+import sys
 import argparse 
-# import Helper_Py3
+import Helper_Py3_compat as Helper_Py3
+
+
+def _collect_input_labels(fnames):
+    data, label = [], []
+    for fname in fnames:
+        data.append(fname)
+        label.append(fname.split('/')[-1].split('.')[0])
+    return data, label
 
 def NCP_count (fnames,
                mm_cutoff,
@@ -8,11 +16,8 @@ def NCP_count (fnames,
                out_fname):
 
     # gather whole file names
-    data, label = [], []
-    for fname in fnames:
-        data.append(fname)
-        label.append(fname.split('/')[-1].split('.')[0])
-    print(label)
+    data, label = _collect_input_labels(fnames)
+    chr_choices = set(chr_list) if chr_list else None
 
     # make genome read length dictionary
     output_list = []
@@ -23,73 +28,24 @@ def NCP_count (fnames,
         filename = data[i]
         print("reading %s" % (filename), file=sys.stderr) 
 
-        samtools_proc = subprocess.Popen(
-            f"samtools view -F 0x10 {filename}",
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,           # <-- this makes lines str, not bytes
-            shell=True
-        )
-        print("DEBUG: samtools in use...")
-
         chr_rlen = {}
-        for line in samtools_proc.stdout:
-            # skip the header
-            if line.startswith('@'):
-                continue
-
-            cols = line.strip().split()
-            read_id, flag, ref_id, pos, mapQ, cigar_str = cols[:6]
-            read_id=":".join(read_id.split(':')[3:7])
-            
-            tlen = int(cols[8])
-            flag, pos = int(flag), int(pos)
-            ref_id = ref_id.strip()
-            pos-=1
-            
-            # non target chromosome
-            if chr_list and ref_id not in chr_list:
-                continue
-
-            # invalid: mapping failure
-            if pos < 0:
-                #type = 'invalid:mutant'
-                continue
-            if flag & 0x4 != 0:
-                #type = 'invalid:mutant'
-                continue
-            if ref_id == '*':
-                continue
-
-            # invalid: mate pairing failture
-            if flag & 0x8 != 0:
-                #type = 'invalid:mutant'
-                continue
-            if flag & 0x2 == 0:
-                continue
-
-            AS,NM,MD = None, None, None
-            for i in range(11, len(cols)):
-                col = cols[i]
-                if col.startswith('AS'):
-                    AS = int(col[5:])
-                elif col.startswith('NM'):
-                    NM = int(col[5:])
-                elif col.startswith('MD'):
-                    MD = col[5:]
-
-            # invalid: too large edit distance 
-            if NM > mm_cutoff:
-                #type = 'invalid:mutant'
+        for cols in Helper_Py3.iter_samtools_view(filename, extra_args=["-F", "0x10"]):
+            record = Helper_Py3.parse_sam_record(cols)
+            if not Helper_Py3.passes_common_paired_filters(
+                record,
+                chr_choices=chr_choices,
+                mm_cutoff=mm_cutoff,
+                require_proper_pair=True,
+            ):
                 continue
 
             # record read length
-            rlen = abs(tlen)
-            if ref_id not in chr_rlen:
-                chr_rlen[ref_id] = {}
-            if rlen not in chr_rlen[ref_id]:
-                chr_rlen[ref_id][rlen] = 0
-            chr_rlen[ref_id][rlen] += 1
+            rlen = abs(record.tlen)
+            if record.rname not in chr_rlen:
+                chr_rlen[record.rname] = {}
+            if rlen not in chr_rlen[record.rname]:
+                chr_rlen[record.rname][rlen] = 0
+            chr_rlen[record.rname][rlen] += 1
             
         output_list.append(chr_rlen)
 
@@ -104,7 +60,7 @@ def NCP_count (fnames,
         s = 'Chromosome\tReadLength\tCounts'
         print(s, file=f)
 
-        for chr in sorted(chr_rlen.keys()):
+        for chr in sorted(chr_rlen.keys(), key=Helper_Py3.chr_key):
             for rlen in sorted(chr_rlen[chr].keys()):
                 count = chr_rlen[chr][rlen]
                 s = chr + "\t" + str(rlen) + "\t" + str(count)
@@ -131,7 +87,7 @@ if __name__ == '__main__':
                         dest="chr_list",
                         type=str,
                         nargs='+',
-                        help='tagert chromosome list')
+                        help='target chromosome list')
     parser.add_argument('-o',
                         dest='out_fname',
                         default='output',
@@ -144,7 +100,7 @@ if __name__ == '__main__':
     if not args.chr_list:
         chr_list = None
     else:
-        chr_list = sorted(args.chr_list)
+        chr_list = sorted(args.chr_list, key=Helper_Py3.chr_key)
 
     NCP_count (args.fnames,
                args.mm_cutoff,

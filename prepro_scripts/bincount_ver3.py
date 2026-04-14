@@ -1,8 +1,17 @@
-import sys, subprocess, re
+import sys
 import argparse
 import copy
 import gzip
 import Helper_Py3_compat as Helper_Py3
+
+
+def _collect_input_labels(fnames):
+    data, label = [], []
+    for fname in fnames:
+        data.append(fname)
+        label.append(fname.rsplit('/', 1)[-1].split('.')[0])
+    return data, label
+
 
 def bin_count (fnames,
                genome_size,
@@ -17,10 +26,8 @@ def bin_count (fnames,
                out_fname):
 
     # gather whole file names
-    data, label = [], []
-    for fname in fnames:
-        data.append(fname)
-        label.append(fname.rsplit('/', 1)[-1].split('.')[0])
+    data, label = _collect_input_labels(fnames)
+    chr_choices = set(chr_list)
 
     # partition the genome
     chr_bins = {}
@@ -39,90 +46,29 @@ def bin_count (fnames,
         g_count = out[k]      
         filename = data[k]
         print("reading %s" % (filename), file=sys.stderr)
-        samtools_proc = subprocess.Popen(["samtools",  "view", "-F 0x10", filename], 
-                                         stdout=subprocess.PIPE, 
-                                         stderr=subprocess.DEVNULL,
-                                         text=True)
-        for line in samtools_proc.stdout:
-            if line.startswith('@'):
-                continue
-            
-            cols = line.strip().split()
-            _, flag, ref_id, pos, _, cigar_str = cols[:6]
-            
-            tlen = int(cols[8])
-            flag, pos = int(flag), int(pos)
-            ref_id = ref_id.strip()
-            pos-=1
-
-            # non target chromosome
-            if ref_id not in chr_list:
-                continue
-            
-            # invalid: mapping failure
-            if pos < 0:
-                continue
-            if flag & 0x4 != 0:
-                continue
-            if ref_id == '*':
+        for cols in Helper_Py3.iter_samtools_view(filename, extra_args=["-F", "0x10"]):
+            record = Helper_Py3.parse_sam_record(cols)
+            if not Helper_Py3.passes_common_paired_filters(
+                record,
+                chr_choices=chr_choices,
+                min_len=min_len,
+                max_len=max_len,
+                mm_cutoff=mm_cutoff,
+                require_proper_pair=True,
+            ):
                 continue
 
-            # invalid: mate pairing failure
-            if flag & 0x8 != 0:
-                continue
-            if flag & 0x2 == 0:
-                continue
-
-            AS,NM,MD = None, None, None
-            for i in range(11, len(cols)):
-                col = cols[i]
-                if col.startswith('AS'):
-                    AS = int(col[5:])
-                elif col.startswith('NM'):
-                    NM = int(col[5:])
-                elif col.startswith('MD'):
-                    MD = col[5:]
-
-            # invalid: too large edit distance 
-            if NM > mm_cutoff:
-                #type = 'invalid:mutant'
-                continue
-
-            # invalid: not right size of read 
-            if abs(tlen) < min_len or abs(tlen) > max_len:
-                #type = 'invalid:mutant'
-                continue
-
-            # get NCP position as the center of full read
-            if tlen > 0: # left read
-                # split the center if tlen is even
-                if tlen % 2 != 0:
-                    NCPscore = [[pos + (tlen // 2), 1]]
-                else:
-                    NCPscore = [[pos + (tlen // 2) - 1, 1]] # don't worry about even tlen case
-            else: # right read
-                end_pos = pos
-                cigar_str=re.split(r'(\d+)',cigar_str)[1:]
-                for i in range(len(cigar_str)//2):
-                    s = cigar_str[2*i+1]
-                    num = int(cigar_str[2*i])
-                    if s == 'M' or s == 'D':
-                        end_pos += num
-
-                # split the center if tlen is even
-                if tlen % 2 != 0:
-                    NCPscore = [[end_pos + (tlen // 2) - 1, 1]]
-                else:
-                    NCPscore = [[end_pos + (tlen // 2) - 1, 1]] # don't worry about even tlen case
+            # Keep the historical single-position policy for even-length fragments.
+            NCPscore = Helper_Py3.record_center_positions(record, even_policy="left")
 
             # collect valid data
             for NCPpos, score in NCPscore:
                 index = int(NCPpos) // int(win_size)
-                g_count[ref_id][index] += score
+                g_count[record.rname][index] += score
 
                 # record tlen for control
                 if tlen_option and k == len(data)-1:
-                    g_tlen[ref_id][index] += abs(tlen)
+                    g_tlen[record.rname][index] += abs(record.tlen)
 
     # summarize the output
     print("writing bin file", file=sys.stderr)
@@ -131,7 +77,7 @@ def bin_count (fnames,
     s = 'Chromosome\tStart\tEnd'
     for i in range(len(label)):
         s += '\t' + label[i]
-    if bin_GC != None:
+    if bin_GC is not None:
         s += '\t' + 'GCcontent'
     if tlen_option:
         s += '\t' + 'Meantlen'
@@ -148,7 +94,7 @@ def bin_count (fnames,
                 s += '\t%s' % (out[j][chr][i])
             if skip_zero and total <= 0:
                 continue
-            if bin_GC != None:
+            if bin_GC is not None:
                 BinID = chr + '_' + str(i)
                 s += '\t%f' % (bin_GC[BinID])
             if tlen_option:
@@ -202,7 +148,7 @@ if __name__ == '__main__':
                         dest="chr_list",
                         type=str,
                         nargs='+',
-                        help='tagert chromosome list')
+                        help='target chromosome list')
     parser.add_argument('--skip',
                         dest="skip_zero",
                         type=str2bool,

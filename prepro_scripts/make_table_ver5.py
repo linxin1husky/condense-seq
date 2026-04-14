@@ -1,4 +1,4 @@
-import sys, math, copy, gzip
+import sys, math, copy
 from argparse import ArgumentParser
 import Helper_Py3_compat as Helper_Py3
 
@@ -71,11 +71,9 @@ class bin_hash:
         st = self.bin_step*idx
         ed = st + self.bin_size
         while pos >= st and pos < ed:
-            try:
-                ID = self.idx_ID[idx]
+            ID = self.idx_ID.get(idx)
+            if ID is not None:
                 find_IDs.append(ID)
-            except:
-                None
             idx -= 1
             if idx < 0:
                 break
@@ -111,11 +109,9 @@ class bin_hash:
         max_idx = (red - 1) // self.bin_step
 
         for idx in range(min_idx, max_idx+1):
-            try:
-                ID = self.idx_ID[idx]
+            ID = self.idx_ID.get(idx)
+            if ID is not None:
                 find_IDs.append(ID)
-            except:
-                None        
         return find_IDs
 
     def insert_range (self, rst, red, value):
@@ -322,27 +318,23 @@ def read_gtab (fname,
             chr, start, end = cols[:col_st]
             ID = (chr, int(start), int(end))
 
-        if chr_choices != None and chr not in chr_choices:
+        if chr_choices is not None and chr not in chr_choices:
             continue
                     
         for field, k in zip(field_names, field_idxs):
             value = cols[k]
             try:
                 value = float(value)
-            except:
+            except ValueError:
                 pass
 
             if mode in ['row', 'both']:
-                try:
-                    ID_field_value[ID]
-                except:
+                if ID not in ID_field_value:
                     ID_field_value[ID] = {}
                 ID_field_value[ID][field] = value
 
             if mode in ['col', 'both']:
-                try:
-                    field_ID_value[field]
-                except:
+                if field not in field_ID_value:
                     field_ID_value[field] = {}
                 field_ID_value[field][ID] = value
  
@@ -466,9 +458,7 @@ def bin_BS_file (fnames, chr_intdict):
             cols = line.strip().split()
             chrname, st, ed, _, _, strand, _, _, _, reads, frac = cols[:11]
 
-            try:
-                chr_intdict[chrname]
-            except:
+            if chrname not in chr_intdict:
                 continue
             
             pos = int(st)
@@ -498,9 +488,7 @@ def bin_chip_file (fnames, chr_intdict, unit='signal'):
             cols = line.strip().split()
             chrname, st, ed, peakname, _, strand, signal, pvalue, qvalue = cols[:9]
 
-            try:
-                chr_intdict[chrname]
-            except:
+            if chrname not in chr_intdict:
                 continue
             
             if unit == 'signal':
@@ -529,9 +517,7 @@ def bin_bedgraph_file (fnames, chr_intdict):
             cols = line.strip().split()
             chrname, st, ed, value = cols
 
-            try:
-                chr_intdict[chrname]
-            except:
+            if chrname not in chr_intdict:
                 continue
             
             st, ed = int(st), int(ed)
@@ -562,7 +548,7 @@ def bin_gtab (fnames, chr_intdict):
                     col_st = 3
                     try:
                         col_ed = cols.index('GCcontent')
-                    except:
+                    except ValueError:
                         col_ed = len(cols)
 
                 First = False
@@ -576,9 +562,7 @@ def bin_gtab (fnames, chr_intdict):
                 chrname, st, ed = cols[0], int(cols[1]), int(cols[2])
                 value = float(cols[3])
                 
-            try:
-                chr_intdict[chrname]
-            except:
+            if chrname not in chr_intdict:
                 continue
                 
             chr_intdict[chrname].insert_range(st, ed, value)
@@ -609,9 +593,9 @@ def make_table(data_fname,
 
     chr_ID_win = {}
     for ID in field_ID_data[field_names[0]]:
-        try:
+        if len(ID) == 3:
             chr, st, ed = ID
-        except:
+        else:
             chr, pos = ID
             st = pos - bin_size // 2
             ed = pos + bin_size // 2
@@ -640,7 +624,7 @@ def make_table(data_fname,
     
     # build interval dictionary for each chromosome
     chr_intdict = {}
-    if len(bs_fnames) + len(chip_fnames) + len(bg_fnames) + len(gtab_fnames)> 0:
+    if len(bs_fnames) + len(chip_fnames) + len(bedgraph_fnames) + len(gtab_fnames) > 0:
         print("building interval dictionary", file=sys.stderr)
         for chr in chr_list:
             print("%s" % (chr), file=sys.stderr)
@@ -682,10 +666,10 @@ def make_table(data_fname,
 
     # read bedgraph file and get value for each bin
     bg_chr_ID_value = {}
-    if bg_fnames:
-        for bg in bg_fnames:
+    if bedgraph_fnames:
+        for bg in bedgraph_fnames:
             chr_intdict_copy = copy.deepcopy(chr_intdict)
-            fnames = bg_fnames[bg]
+            fnames = bedgraph_fnames[bg]
             chr_ID_value = bin_bedgraph_file(fnames, chr_intdict_copy)
             bg_chr_ID_value[bg] = chr_ID_value
             del chr_intdict_copy, chr_ID_value
@@ -707,7 +691,7 @@ def make_table(data_fname,
     # write annotation file
     print("writing annotation table file", file=sys.stderr)
 
-    f = gzip.open(out_fname + '_table.gtab.gz', 'wb')
+    f = Helper_Py3.open_any(out_fname + '_table.gtab.gz', "wt")
     if data_type == 'point':
         s = 'Chromosome\tPosition'
     else:
@@ -742,10 +726,10 @@ def make_table(data_fname,
     for chr in chr_list:
         ID_win = chr_ID_win[chr]
         for ID in sorted(ID_win.keys()):
-            try:
+            if len(ID) == 2:
                 chr, pos = ID
                 s = chr + "\t" + str(pos)
-            except:
+            else:
                 chr, st, ed = ID
                 s = chr + "\t" + str(st) + "\t" + str(ed)            
 
@@ -753,7 +737,7 @@ def make_table(data_fname,
                 data = field_ID_data[field_name][ID]
                 try:
                     data = round(data, 5)
-                except:
+                except TypeError:
                     pass
                 s += '\t' + str(data)
             
@@ -765,39 +749,24 @@ def make_table(data_fname,
                 s += '\t' + str(round(chr_ID_AT[chr][ID], 5))
 
             for bs in bs_names:
-                try:
-                    C = int(bs_chr_ID_C[bs][chr][ID])
-                except:
-                    C = 0
+                C = int(bs_chr_ID_C.get(bs, {}).get(chr, {}).get(ID, 0))
                 s += '\t' + str(C)
-                try:
-                    meC = round(bs_chr_ID_meC[bs][chr][ID],5)
-                except:
-                    meC = 0.0
+                meC = round(bs_chr_ID_meC.get(bs, {}).get(chr, {}).get(ID, 0.0), 5)
                 s += '\t' + str(meC)
 
             for chip in chip_names:
                 ID_value = chip_chr_ID_value[chip][chr]
-                try:
-                    value = round(ID_value[ID],5)
-                except:
-                    value = 0.0
+                value = round(ID_value.get(ID, 0.0), 5)
                 s += '\t' + str(value)
 
             for bg in bg_names:
                 ID_value = bg_chr_ID_value[bg][chr]
-                try:
-                    value = round(ID_value[ID],5)
-                except:
-                    value = 0.0
+                value = round(ID_value.get(ID, 0.0), 5)
                 s += '\t' + str(value)
 
             for gtab in gtab_names:
                 ID_value = gtab_chr_ID_value[gtab][chr]
-                try:
-                    value = round(ID_value[ID],5)
-                except:
-                    value = 0.0
+                value = round(ID_value.get(ID, 0.0), 5)
                 s += '\t' + str(value)
 
             print(s, file=f)
@@ -861,7 +830,7 @@ if __name__ == '__main__':
                         dest="chr_list",
                         type=str,
                         nargs='+',
-                        help='tagert chromosome list')
+                        help='target chromosome list')
     parser.add_argument('-o',
                         dest='out_fname',
                         default='output',

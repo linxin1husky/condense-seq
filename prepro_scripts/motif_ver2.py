@@ -1,4 +1,4 @@
-import sys, math, copy, gzip
+import sys, math, copy
 from argparse import ArgumentParser
 import Helper_Py3_compat as Helper_Py3
 
@@ -48,7 +48,7 @@ def NCP_motif (peak_fname,
                 chr_peak[chr][pos] = {}
                 chr_peakpos[chr].append(pos)
                 chr_Pcov[chr][pos] = {}
-                chr_info[chr].append([pos, (ID, chr, pos)])
+                chr_info[chr].append([pos, (chr, pos)])
             assert name not in chr_peak[chr][pos]
             chr_peak[chr][pos][name] = count
             chr_Pcov[chr][pos][name] = 0
@@ -79,7 +79,7 @@ def NCP_motif (peak_fname,
             if prev_chr != chr:
                 pt = 0
                 prev_chr = chr
-            if order == None:
+            if order is None:
                 print(chr + " pos " + str(pos) +" is reading", file=sys.stderr)
                 order = int(math.log10(max(pos, 1)))
             elif int(math.log10(max(pos, 1))) > order:
@@ -89,8 +89,10 @@ def NCP_motif (peak_fname,
                 continue
             if pos < chr_peakpos[chr][pt]:
                 continue
-            while pos > chr_peakpos[chr][pt] and pt < len(chr_peakpos[chr]):
+            while pt < len(chr_peakpos[chr]) and pos > chr_peakpos[chr][pt]:
                 pt += 1
+            if pt >= len(chr_peakpos[chr]):
+                continue
             if pos != chr_peakpos[chr][pt]:
                 continue
             counts = cols[2:]
@@ -105,7 +107,7 @@ def NCP_motif (peak_fname,
 
     # start writing motif file
     print("writing motif file", file=sys.stderr)
-    f = gzip.open(out_fname + '_motif.txt.gz', 'wt', encoding='utf-8', newline='\n')
+    f = Helper_Py3.open_any(out_fname + '_motif.txt.gz', "wt")
     s = 'Sample\tChromosome\tPosition\tStrand\tWeight\tSequence'
     print(s, file=f)
 
@@ -119,14 +121,13 @@ def NCP_motif (peak_fname,
             while Find and len(left) > 0:
                 idx, seq = left.pop(0)
                 seq += 'N'*(motif_len-len(seq))
-                ID, chr, peakpos = chr_info[chr][idx]
+                chrom_name, peakpos = chr_info[chr][idx]
                 for j in range(len(target)):
                     name = target[j]
-                    try:
-                        weight = chr_peak[chr][peakpos][name]
-                    except:
+                    weight = chr_peak[chrom_name][peakpos].get(name)
+                    if weight is None:
                         continue
-                    s = name + "\t" + chr + "\t" + str(peakpos) + "\t" + '+' + "\t" + str(weight)
+                    s = name + "\t" + chrom_name + "\t" + str(peakpos) + "\t" + '+' + "\t" + str(weight)
                     s += '\t' + seq
                     print(s, file=f)
             Find = False
@@ -151,14 +152,13 @@ def NCP_motif (peak_fname,
                 ed = min(len(line), motif_len-len(seq))
                 seq += line[:ed]
                 if len(seq) == motif_len:
-                    ID, chr, peakpos = chr_info[chr][idx]
+                    chrom_name, peakpos = chr_info[chr][idx]
                     for j in range(len(target)):
                         name = target[j]
-                        try:
-                            weight = chr_peak[chr][peakpos][name]
-                        except:
+                        weight = chr_peak[chrom_name][peakpos].get(name)
+                        if weight is None:
                             continue
-                        s = name + "\t" + chr + "\t" + str(peakpos) + "\t" + '+' + "\t" + str(weight)
+                        s = name + "\t" + chrom_name + "\t" + str(peakpos) + "\t" + '+' + "\t" + str(weight)
                         s += '\t' + seq
                         print(s, file=f)
                 else:
@@ -171,14 +171,13 @@ def NCP_motif (peak_fname,
                     loc = pos - pt - 1
                     seq = line[loc:min(loc+motif_len,len(line))]
                 if len(seq) == motif_len:
-                    ID, chr, peakpos = chr_info[chr][k]
+                    chrom_name, peakpos = chr_info[chr][k]
                     for j in range(len(target)):
                         name = target[j]
-                        try:
-                            weight = chr_peak[chr][peakpos][name]
-                        except:
+                        weight = chr_peak[chrom_name][peakpos].get(name)
+                        if weight is None:
                             continue
-                        s = name + "\t" + chr + "\t" + str(peakpos) + "\t" + '+' + "\t" + str(weight)
+                        s = name + "\t" + chrom_name + "\t" + str(peakpos) + "\t" + '+' + "\t" + str(weight)
                         s += '\t' + seq
                         print(s, file=f)
                 else:
@@ -186,22 +185,21 @@ def NCP_motif (peak_fname,
                 k += 1
                 try:
                     pos = chr_st[chr][k]
-                except:
-                    None
+                except IndexError:
+                    pass
             if chrhit_count >= len(chr_st) and k >= len(chr_st[chr]) and len(left) == 0:
                 break
             pt += len(line)
     while Find and len(left) > 0:
         idx, seq = left.pop(0)
         seq += 'N'*(motif_len-len(seq))
-        ID, chr, peakpos = chr_info[chr][idx]
+        chrom_name, peakpos = chr_info[chr][idx]
         for j in range(len(target)):
             name = target[j]
-            try:
-                weight = chr_peak[chr][peakpos][name]
-            except:
+            weight = chr_peak[chrom_name][peakpos].get(name)
+            if weight is None:
                 continue
-            s = name + "\t" + chr + "\t" + str(peakpos) + "\t" + '+' + "\t" + str(weight)
+            s = name + "\t" + chrom_name + "\t" + str(peakpos) + "\t" + '+' + "\t" + str(weight)
             s += '\t' + seq
             print(s, file=f)
     
@@ -237,7 +235,7 @@ if __name__ == '__main__':
                         dest="chr_list",
                         type=str,
                         nargs='+',
-                        help='tagert chromosome list')
+                        help='target chromosome list')
     parser.add_argument('-o',
                         dest='out_fname',
                         default='output',

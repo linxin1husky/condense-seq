@@ -1,7 +1,6 @@
 import sys
 from argparse import ArgumentParser
 import math
-import gzip
 import Helper_Py3_compat as Helper_Py3
 
 def standardize (fnames,
@@ -62,11 +61,10 @@ def standardize (fnames,
                     continue
 
                 # sum up the data
-                for k in range(len(colnums)):
-                    colnum = colnums[k]
+                for k, colnum in enumerate(colnums):
                     try:
                         value = float(cols[colnum])
-                    except:
+                    except ValueError:
                         continue
 
                     if i == 0:
@@ -78,7 +76,7 @@ def standardize (fnames,
                         std_list[k] += std
 
         # take average of sums at last
-        for k in range(len(colnums)):
+        for k, _ in enumerate(colnums):
             count = count_list[k]
             if count <= 0:
                 continue
@@ -93,7 +91,7 @@ def standardize (fnames,
         out_fname = fname.rsplit('_', 1)[0] + '_zscore.gtab.gz'
         print("\t writing %s" % (out_fname.rsplit('/', 1)[-1]), file=sys.stderr)
         
-        f = gzip.open(out_fname, 'wt', encoding='utf-8')
+        f = Helper_Py3.open_any(out_fname, "wt")
         
         First = True
         for line in Helper_Py3.open_any(fname, "rt"):
@@ -120,15 +118,18 @@ def standardize (fnames,
 
             # compute z-score and writing to output
             row = cols[:col_st]
-            for k in range(len(colnums)):
-                colnum = colnums[k]
+            for k, colnum in enumerate(colnums):
                 try:
                     value = float(cols[colnum])
+                except ValueError:
+                    zscore = 'NA'
+                else:
                     mean = mean_list[k]
                     std = std_list[k]
-                    zscore = round(float(value-mean)/std, 5)
-                except: # can't compute
-                    zscore = 'NA'
+                    if std <= 0:
+                        zscore = 'NA'
+                    else:
+                        zscore = round(float(value-mean)/std, 5)
                 row.append(str(zscore))
 
             print('\t'.join(row), file=f)
@@ -149,7 +150,7 @@ if __name__ == '__main__':
                         dest="chr_list",
                         type=str,
                         nargs='+',
-                        help='tagert chromosome list')
+                        help='target chromosome list')
     parser.add_argument('-c',
                         dest="colnums",
                         type=str,

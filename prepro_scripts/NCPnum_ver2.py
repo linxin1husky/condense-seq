@@ -86,7 +86,11 @@ def NCP_number (tnum_fnames,
                 nums = []
                 for i in range(col_st, col_ed):
                     cov = float(cols[i])
-                    frac = cov / total_covs[i - col_st]
+                    denom = total_covs[i - col_st]
+                    if denom <= 0:
+                        nums.append("0")
+                        continue
+                    frac = cov / denom
                     nums.append(str(int(round(mnum * frac))))
 
                 print('\t'.join(cols[:col_st] + nums), file=f)
@@ -122,7 +126,7 @@ if __name__ == '__main__':
                         dest="chr_list",
                         type=str,
                         nargs='+',
-                        help='tagert chromosome list')
+                        help='target chromosome list')
     parser.add_argument('-o',
                         dest='out_fname',
                         default='output',

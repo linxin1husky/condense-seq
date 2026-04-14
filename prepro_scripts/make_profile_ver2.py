@@ -1,4 +1,4 @@
-import sys, math, copy, gzip
+import sys, math, copy
 from argparse import ArgumentParser
 import Helper_Py3_compat as Helper_Py3
 
@@ -186,9 +186,8 @@ def read_GTF (fname, chr_list=None, mode="gene", strip_ver=True):
                 ID_field_values[geneID]["CTS"] = CTS
 
     for ID in ID_field_values:
-        try:
-            exons = ID_field_values[ID]["exons"]
-        except:
+        exons = ID_field_values[ID].get("exons")
+        if exons is None:
             continue
         new = []
         for start, end in sorted(exons):
@@ -258,10 +257,9 @@ def Profiling (data_fname,
     for ID in ID_field_values:
         field_values = ID_field_values[ID]
         chr = field_values['chr']
-        try:
-            pos1, pos2 = field_values[mark1], field_values[mark2]
-        except:
+        if mark1 not in field_values or mark2 not in field_values:
             continue
+        pos1, pos2 = field_values[mark1], field_values[mark2]
         strand = field_values['strand']
         if strand == '+':
             start = max(0, pos1 - up_win)
@@ -326,7 +324,7 @@ def Profiling (data_fname,
 
     # start writing profile file
     print("writing profile file", file=sys.stderr)
-    f = gzip.open(out_fname + '_profile.txt.gz', 'wt', encoding='utf-8', newline='\n')
+    f = Helper_Py3.open_any(out_fname + '_profile.txt.gz', "wt")
     s = 'Sample\tID\tFeature\tChromosome\tPosition\tStrand'
     a, b, c, d = 0, left_len, profile_len-right_len, profile_len
     for i in range(b-a):
@@ -390,7 +388,7 @@ def Profiling (data_fname,
             prev_chr = chr
             order = None
 
-        if order == None:
+        if order is None:
             print(chr + " pos " + str(st) +" is reading", file=sys.stderr)
             order = int(math.log10(max(st, 1)))
         elif int(math.log10(max(st, 1))) > order:
@@ -454,7 +452,7 @@ def Profiling (data_fname,
                 for i in range(len(labels)):
                     try:
                         count = float(counts[i])
-                    except:
+                    except ValueError:
                         continue
                     ID_domain[ID][i][idx].append(count)
                 
@@ -488,7 +486,7 @@ def Profiling (data_fname,
                 for i in range(len(labels)):
                     try:
                         count = float(counts[i])
-                    except:
+                    except ValueError:
                         continue
                     for idx in range(idx_st, idx_ed):
                         ID_domain[ID][i][idx].append(count)
@@ -541,7 +539,7 @@ if __name__ == '__main__':
                         dest="chr_list",
                         type=str,
                         nargs='+',
-                        help='tagert chromosome list')
+                        help='target chromosome list')
     parser.add_argument('--profile-len',
                         dest="profile_len",
                         type=int,
