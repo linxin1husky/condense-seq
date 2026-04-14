@@ -1,7 +1,14 @@
 import sys
 import argparse
-import gzip
 import Helper_Py3_compat as Helper_Py3
+
+
+def _coord_key(chrom):
+    token = chrom[3:] if chrom.lower().startswith('chr') else chrom
+    try:
+        return int(token)
+    except ValueError:
+        return token
 
 def concatenate (fnames,
                  colnums_list,
@@ -25,7 +32,7 @@ def concatenate (fnames,
 
     # start concatenate the files
     print("Concatenating files", file=sys.stderr)
-    f = gzip.open(out_fname +'.gtab.gz', 'wt', encoding='utf-8', newline='\n')
+    f = Helper_Py3.open_any(out_fname +'.gtab.gz', "wt")
 
     First = True
     while True:
@@ -51,10 +58,7 @@ def concatenate (fnames,
                         chr = cols[0]
                         pos = cols[1:col_st]
 
-                        try:
-                            chr = int(chr[3:])
-                        except:
-                            chr = chr[3:]
+                        chr = _coord_key(chr)
 
                         pos = [int(value) for value in pos]
                         pt = [chr] + pos

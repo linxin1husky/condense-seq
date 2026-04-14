@@ -1,7 +1,35 @@
-import sys, subprocess, re
+import sys
 import argparse
 import gzip
 import Helper_Py3_compat as Helper_Py3
+
+
+def _collect_input_labels(fnames):
+    data, label = [], []
+    for fname in fnames:
+        data.append(fname)
+        label.append(fname.rsplit('/', 1)[-1].split('.')[0])
+    return data, label
+
+
+def _record_ncp_scores(chr_ncp, ref_id, name, ncp_scores):
+    chrom_scores = chr_ncp.setdefault(ref_id, {})
+    for ncp_pos, score in ncp_scores:
+        pos_scores = chrom_scores.setdefault(ncp_pos, {})
+        pos_scores[name] = pos_scores.get(name, 0) + score
+
+
+def _write_gtab(path, chr_scores, labels):
+    with gzip.open(path, 'wt', encoding='utf-8', newline='\n') as f:
+        print('Chromosome\tPosition\t' + '\t'.join(labels), file=f)
+        for chrom in sorted(chr_scores.keys(), key=Helper_Py3.chr_key):
+            for pos in sorted(chr_scores[chrom].keys()):
+                row = [chrom, str(pos)]
+                score_map = chr_scores[chrom][pos]
+                for name in labels:
+                    row.append(str(score_map.get(name, 0)))
+                print('\t'.join(row), file=f)
+
 
 def NCP_peak (fnames,
               min_len,
@@ -14,10 +42,8 @@ def NCP_peak (fnames,
               out_fname):
 
     # gather whole file names
-    data, label = [], []
-    for fname in fnames:
-        data.append(fname)
-        label.append(fname.rsplit('/', 1)[-1].split('.')[0])
+    data, label = _collect_input_labels(fnames)
+    chr_choices = set(chr_list) if chr_list else None
 
     # make genome counts dictionary
     chr_NCP = {}
@@ -28,136 +54,29 @@ def NCP_peak (fnames,
         #chr_cov = out_cov[i]
         filename = data[i]
         print("reading %s" % (filename), file=sys.stderr)
-        samtools_proc = subprocess.Popen(["samtools",  "view", "-F 0x10", filename], 
-                                         stdout=subprocess.PIPE, 
-                                         stderr=subprocess.DEVNULL,
-                                         text=True)
-
-        for line in samtools_proc.stdout:
-            # skip the header
-            if line.startswith('@'):
+        for cols in Helper_Py3.iter_samtools_view(filename, extra_args=["-F", "0x10"]):
+            record = Helper_Py3.parse_sam_record(cols)
+            if not Helper_Py3.passes_common_paired_filters(
+                record,
+                chr_choices=chr_choices,
+                min_len=min_len,
+                max_len=max_len,
+                mm_cutoff=mm_cutoff,
+                require_proper_pair=True,
+            ):
                 continue
 
-            cols = line.strip().split()
-            _, flag, ref_id, pos, _, cigar_str = cols[:6]
-            
-            tlen = int(cols[8])
-            flag, pos = int(flag), int(pos)
-            ref_id = ref_id.strip()
-            pos-=1
-            
-            # non target chromosome
-            if chr_list and ref_id not in chr_list:
-                continue
+            ncp_scores = Helper_Py3.record_center_positions(record, even_policy="split")
+            _record_ncp_scores(chr_NCP, record.rname, name, ncp_scores)
 
-            # invalid: mapping failure
-            if pos < 0:
-                #type = 'invalid:mutant'
-                continue
-            if flag & 0x4 != 0:
-                #type = 'invalid:mutant'
-                continue
-            if ref_id == '*':
-                continue
-
-            # invalid: mate pairing failture
-            if flag & 0x8 != 0:
-                #type = 'invalid:mutant'
-                continue
-            if flag & 0x2 == 0:
-                continue
-
-            # invalid: ambiguous mapping
-            #mapQ = float(mapQ)
-            #if mapQ < 10:
-            #    type = 'invalid:multimap'
-
-            AS,NM,MD = None, None, None
-            for i in range(11, len(cols)):
-                col = cols[i]
-                if col.startswith('AS'):
-                    AS = int(col[5:])
-                elif col.startswith('NM'):
-                    NM = int(col[5:])
-                elif col.startswith('MD'):
-                    MD = col[5:]
-
-            # invalid: too large edit distance 
-            if NM > mm_cutoff:
-                #type = 'invalid:mutant'
-                continue
-
-            # invalid: not right size of read (mono-NCP selection)
-            if abs(tlen) < min_len or abs(tlen) > max_len:
-                #type = 'invalid:mutant'
-                continue
-
-            # get NCP position and coverage range
-            if tlen > 0: # left read
-                end_pos = pos + tlen
-                if tlen % 2 != 0:
-                    NCPscore = [[pos+tlen // 2, 1]]
-                else:
-                    NCPscore = [[pos+tlen // 2 - 1, 0.5], [pos+tlen // 2, 0.5]]
-            else: # right read
-                end_pos = pos
-                cigar_str=re.split(r'(\d+)',cigar_str)[1:]
-                for i in range(len(cigar_str) // 2):
-                    s = cigar_str[2*i+1]
-                    num = int(cigar_str[2*i])
-                    if s == 'M' or s == 'D':
-                        end_pos += num
-                pos = end_pos + tlen
-                if tlen % 2 != 0:
-                    NCPscore = [[end_pos+tlen // 2 - 1, 1]]
-                else:
-                    NCPscore = [[end_pos+tlen // 2 - 1, 0.5], [end_pos+tlen // 2, 0.5]]
-            
-            # record NCP position
-            for NCPpos, score in NCPscore:
-                if ref_id not in chr_NCP:
-                    chr_NCP[ref_id] = {}
-                if NCPpos not in chr_NCP[ref_id]:
-                    chr_NCP[ref_id][NCPpos] = {}
-                if name not in chr_NCP[ref_id][NCPpos]:
-                    chr_NCP[ref_id][NCPpos][name] = 0
-                chr_NCP[ref_id][NCPpos][name] += score
-
-    # need to implement
-    """
-    # Kernel smoothing of NCP positioning signal
-    print >> sys.stderr, "peak calling:Kernel smoothing of NCP positions"
-    def gauss (x):
-        return np.exp(-(x**2)*0.5)/np.sqrt(2*np.pi)
-
-    chr_KDE = {}
-    for chr in sorted(chr_NCP.keys()):
-        for NCPpos in sorted(chr_NCP[chr].keys()):
-            try:
-                score = chr_NCP[chr][NCPpos][label[-1]]
-            except:
-                continue
-            if chr not in chr_KDE:
-                chr_KDE[chr] = {}
-            for k in range(NCPpos-3*bandwidth, NCPpos+3*bandwidth+1):
-                value = score * gauss(float(k - NCPpos)/bandwidth)/bandwidth
-                if k not in chr_KDE[chr]:
-                    chr_KDE[chr][k] = 0.0
-                chr_KDE[chr][k] += value
-    del chr_NCP
-
-    # find the local maximum of signals
-    print >> sys.stderr, "find peaks of NCP positions"
-    """
-    
-    # select NCP positions with highest score and minimized overlapping    
+    # Select NCP positions with highest score and minimized overlapping.
     print("peak calling: filtering NCP positions", file=sys.stderr)
         
     # find the index where the target would be inserted in right order
     def binary_insert (sortlist, target):
         st, ed = 0, len(sortlist)-1
         while st <= ed:
-            mid = (st+ed) // 2      # Classic python2 to 3 change: where "/" does true divsion, returning float.
+            mid = (st+ed) // 2
             if sortlist[mid] == target:
                 return mid
             elif sortlist[mid] > target:
@@ -171,13 +90,12 @@ def NCP_peak (fnames,
         name_temp = {}
         for NCPpos in sorted(chr_NCP[chr].keys()):
             for name in label:
-                try:
-                    score = chr_NCP[chr][NCPpos][name]
-                    if name not in name_temp:
-                        name_temp[name] = []
-                    name_temp[name].append([score, NCPpos])
-                except:
+                score = chr_NCP[chr][NCPpos].get(name)
+                if score is None:
                     continue
+                if name not in name_temp:
+                    name_temp[name] = []
+                name_temp[name].append([score, NCPpos])
         for name in name_temp:
             selected = []
             temp = sorted(name_temp[name], key=lambda x: x[0], reverse=True)
@@ -202,53 +120,11 @@ def NCP_peak (fnames,
 
     # summarize the output
     print("writing NPS file", file=sys.stderr)
-    
-    f = gzip.open(out_fname + '_NPS.gtab.gz', 'wt', encoding='utf-8', newline='\n')
-    s = 'Chromosome\tPosition'
-    for i in range(len(label)):
-        s += '\t' + label[i]
-    print(s, file=f)
-
-    #ID = 0
-    for chr in sorted(chr_NCP.keys(), key=Helper_Py3.chr_key):
-        for NCPpos in sorted(chr_NCP[chr].keys()):
-            #s = str(ID) + "\t" + chr + "\t" + str(NCPpos)
-            s = chr + "\t" + str(NCPpos)
-            for name in label:
-                try:
-                    score = chr_NCP[chr][NCPpos][name]
-                except:
-                    score = 0
-                s += "\t" + str(score)
-            print(s, file=f)
-            #ID += 1
-        
-    f.close()
+    _write_gtab(out_fname + '_NPS.gtab.gz', chr_NCP, label)
 
     
     print("writing peak file", file=sys.stderr)
-    
-    f = gzip.open(out_fname + '_peak.gtab.gz', 'wt', encoding='utf-8', newline='\n')
-    s = 'Chromosome\tPosition'
-    for i in range(len(label)):
-        s += '\t' + label[i]
-    print(s, file=f)
-
-    #ID = 0
-    for chr in sorted(chr_peak.keys(), key=Helper_Py3.chr_key):
-        for NCPpos in sorted(chr_peak[chr].keys()):
-            #s = str(ID) + "\t" + chr + "\t" + str(NCPpos)
-            s = chr + "\t" + str(NCPpos)
-            for name in label:
-                try:
-                    score = chr_peak[chr][NCPpos][name]
-                except:
-                    score = 0
-                s += "\t" + str(score)
-            print(s, file=f)
-            #ID += 1
-
-    f.close()
+    _write_gtab(out_fname + '_peak.gtab.gz', chr_peak, label)
 
     print("Done", file=sys.stderr)
     
@@ -296,7 +172,7 @@ if __name__ == '__main__':
                         dest="chr_list",
                         type=str,
                         nargs='+',
-                        help='tagert chromosome list')
+                        help='target chromosome list')
     parser.add_argument('-o',
                         dest='out_fname',
                         default='output',

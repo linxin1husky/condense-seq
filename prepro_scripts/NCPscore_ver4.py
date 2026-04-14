@@ -1,4 +1,4 @@
-import os, sys, subprocess, re
+import sys
 import argparse
 import math
 import gzip
@@ -9,13 +9,21 @@ def get_score (test, control, metric):
     if control <= 0:
         return "NA"
     ratio = float(test)/float(control)
-    if metric == None:
+    if metric is None:
         return ratio
-    elif type(metric) == int:
+    elif isinstance(metric, int):
         return -math.log(ratio, base=metric)
     else:
         assert metric == 'e'
         return -math.log(ratio)
+
+
+def _coord_key(chrom):
+    token = chrom[3:] if chrom.lower().startswith('chr') else chrom
+    try:
+        return int(token)
+    except ValueError:
+        return token
 
 
 def NCP_score (fnames_list,
@@ -54,7 +62,7 @@ def NCP_score (fnames_list,
                     tfrac = tnum_tfrac[tnums[k]]
                     offset = get_score(tfrac, 1, metric=metric)
                 else:
-                    if metric != None:
+                    if metric is not None:
                         offset = 0
                     else:
                         offset = 1
@@ -96,10 +104,7 @@ def NCP_score (fnames_list,
                                 if chr_list and test_chr not in chr_list:
                                     continue
 
-                                try:
-                                    test_chr = int(test_chr[3:])
-                                except:
-                                    test_chr = test_chr[3:]
+                                test_chr = _coord_key(test_chr)
 
                                 test_pos = [int(value) for value in test_pos]
                                 test_pt = [test_chr] + test_pos
@@ -129,10 +134,7 @@ def NCP_score (fnames_list,
                                 if chr_list and control_chr not in chr_list:
                                     continue
 
-                                try:
-                                    control_chr = int(control_chr[3:])
-                                except:
-                                    control_chr = control_chr[3:]
+                                control_chr = _coord_key(control_chr)
 
                                 control_pos = [int(value) for value in control_pos]
                                 control_pt = [control_chr] + control_pos
@@ -249,7 +251,7 @@ def NCP_score (fnames_list,
 
                             # get score
                             score = get_score(ncount, ncontrol, metric=metric)
-                            if metric != None:
+                            if metric is not None:
                                 score += offset # offset correction
                             else:
                                 score *= offset
@@ -267,9 +269,8 @@ def NCP_score (fnames_list,
 
                 if u == 1:
                     f.close()
-
-        if u == 0:
-            total_covs_list.append(total_covs)
+            if u == 0:
+                total_covs_list.append(total_covs)
 
         print("", file=sys.stderr)   
 
@@ -300,7 +301,7 @@ if __name__ == '__main__':
                         help='titration number for each data (in same order of data files)')
     parser.add_argument('--numc',
                         dest="numc_choice",
-                        type=bool,
+                        type=Helper_Py3.str2bool,
                         nargs='?',
                         const=True,
                         default=False,
@@ -314,7 +315,7 @@ if __name__ == '__main__':
                         dest="chr_list",
                         type=str,
                         nargs='+',
-                        help='tagert chromosome list')
+                        help='target chromosome list')
     parser.add_argument('-o',
                         dest='out_fname',
                         default='output',
@@ -337,6 +338,7 @@ if __name__ == '__main__':
         if not args.tnums or not args.tfname:
             print("No titration information", file=sys.stderr)
             print("starting score computation without correction", file=sys.stderr)
+            numc_choice = False
         # check tnums for filenames
         elif len(args.fnames_list) != len(args.tnums):
             print("Error: mismatch of file and titration number.", file=sys.stderr)
@@ -354,7 +356,7 @@ if __name__ == '__main__':
         metric = metric.split('[')[-1][:-1]
         try:
             metric = int(metric)
-        except:
+        except ValueError:
             assert metric == 'e'
     elif metric.startswith('None'):
         metric = None

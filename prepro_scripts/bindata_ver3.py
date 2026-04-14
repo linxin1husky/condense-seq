@@ -2,157 +2,139 @@ import sys, math, gzip
 from argparse import ArgumentParser
 import Helper_Py3_compat as Helper_Py3
 
-def Bin_data (data_fname,
-              chr_size,
-              bin_size,
-              bin_step,
-              bin_value,
-              skip_zero,
-              chr_list,
-              out_fname):
 
-    # reading data file and binning the data
-    print >> sys.stderr, "reading data file"
+def _validate_inputs(bin_size, bin_step, bin_value):
+    if bin_size <= 0:
+        raise ValueError("bin_size must be positive")
+    if bin_step <= 0:
+        raise ValueError("bin_step must be positive")
+    if bin_value not in {"sum", "mean"}:
+        raise ValueError("bin_value must be either 'sum' or 'mean'")
 
-    chr_Bdata = {}
-    chr_Bcount = {}  
-    
-    First = True
-    order = None
-    for line in Helper_Py3.open_any(data_fname, "rt"):
-        cols = line.strip().split()
 
-        # find data type and range
-        if First:
-            _, col_st, _, _ = Helper_Py3.read_gtab_header(cols)
-            labels = cols[col_st:]
-            First = False
-            continue
+def _log_progress(chrom, start, order):
+    current_order = int(math.log10(max(start, 1)))
+    if order is None:
+        print(chrom + " st " + str(start) + " is reading", file=sys.stderr)
+        return current_order
+    if current_order > order:
+        print(chrom + " st " + str(start) + " is reading", file=sys.stderr)
+        return order + 1
+    return order
 
-        if col_st == 2:
-            chr, st, ed = cols[0], int(cols[1]), int(cols[1]) + 1
+
+def _accumulate_bin(chr_Bdata, chr_Bcount, chrom, idx, labels, values, overlap_len, bin_value):
+    name_data = chr_Bdata.setdefault(chrom, {}).setdefault(idx, {})
+    name_count = None
+    if bin_value == "mean":
+        name_count = chr_Bcount.setdefault(chrom, {}).setdefault(idx, {})
+
+    for name, value in zip(labels, values):
+        name_data[name] = name_data.get(name, 0.0) + value * overlap_len
+        if name_count is not None:
+            name_count[name] = name_count.get(name, 0) + 1
+
+
+def _build_output_row(chrom, idx, chr_size, name_Bdata, chr_Bcount, labels, bin_size, bin_step, bin_value):
+    values = []
+    for name in labels:
+        bin_data = name_Bdata.get(name, 0.0)
+        if bin_value == "mean":
+            bin_count = chr_Bcount.get(name, 0)
+            if bin_count <= 0:
+                value = "NA"
+            else:
+                value = float(bin_data) / bin_count
         else:
-            chr, st, ed = cols[0], int(cols[1]), int(cols[2])
-        
-        if chr not in chr_list:
-            continue
+            value = bin_data
+        values.append(value)
 
-        if order == None:
-            print >> sys.stderr, chr + " st " + str(st) +" is reading"
-            order = int(math.log10(max(st, 1)))
-        elif int(math.log10(max(st, 1))) > order:
-            print >> sys.stderr, chr + " st " + str(st) +" is reading"
-            order += 1
+    bin_start = bin_step * idx
+    bin_end = min(bin_start + bin_size, chr_size[chrom])
+    row = [chrom, str(bin_start), str(bin_end)]
+    row += [str(value) for value in values]
+    return "\t".join(row)
 
-        # limit the input end by chromosome size
-        ed = min(ed, chr_size[chr])
 
-        # find bins overlap with data range
-        idx = st // bin_step
-        bst = bin_step*idx
-        bed = bst + bin_size
-
-        idx_st = idx
-        while st >= bst and st < bed:
-            if idx < idx_st:
-                idx_st = idx
-            idx -= 1
-            if idx < 0:
-                break
-            bst = bin_step*idx
-            bed = bst + bin_size
-
-        idx_ed = (ed - 1) // bin_step
-        assert idx_st <= idx_ed
-        
-        # binning the data
-        values = [float(value) for value in cols[col_st:]]
-        for idx in range(idx_st, idx_ed+1):
-            bst = bin_step*idx
-            bed = bst + bin_size
-            a, b = max(st, bst), min(ed, bed)
-            length = b - a
-
-            if chr not in chr_Bdata:
-                chr_Bdata[chr] = {}
-            if idx not in chr_Bdata[chr]:
-                chr_Bdata[chr][idx] = {}
-
-            if bin_value == 'mean':
-                if chr not in chr_Bcount:
-                    chr_Bcount[chr] = {}
-                if idx not in chr_Bcount[chr]:
-                    chr_Bcount[chr][idx] = {}
-
-            for name, value in zip(labels, values):
-                if name not in chr_Bdata[chr][idx]:
-                    chr_Bdata[chr][idx][name] = 0
-                chr_Bdata[chr][idx][name] +=value*length
-
-                if bin_value == 'mean':
-                    if name not in chr_Bcount[chr][idx]:
-                        chr_Bcount[chr][idx][name] = 0
-                    chr_Bcount[chr][idx][name] +=1
-                    
-    # write bin data file
+def _write_output(out_fname, chr_Bdata, chr_Bcount, chr_size, chr_list, labels, bin_size, bin_step, bin_value, skip_zero):
     print("writing bin data file", file=sys.stderr)
-    
-    f = gzip.open(out_fname + '_Bdata.gtab.gz', 'wt', encoding='utf-8', newline='\n')
-    s = 'Chromosome\tStart\tEnd\t'
-    s += '\t'.join(labels)
-    print(s, file=f)
 
-    for chr in chr_list:
-        try:
-            chr_Bdata[chr]
-        except:
-            continue
-        
-        idx = 0
-        last_idx = chr_size[chr] // bin_step
-        while idx <= last_idx:
-            try:
-                name_Bdata = chr_Bdata[chr][idx]
-            except:
-                idx +=1
-                continue
-            
-            total = sum(name_Bdata.values())
-            
-            if skip_zero and total <=0:
-                idx +=1
+    with gzip.open(out_fname + "_Bdata.gtab.gz", "wt", encoding="utf-8", newline="\n") as f:
+        header = "Chromosome\tStart\tEnd\t" + "\t".join(labels)
+        print(header, file=f)
+
+        for chrom in chr_list:
+            chrom_bins = chr_Bdata.get(chrom)
+            if not chrom_bins:
                 continue
 
-            Bvalues = []
-            for name in labels:
-                Bdata = name_Bdata[name]
-                if bin_value == 'mean':
-                    Bcount = chr_Bcount[chr][idx][name]
-                    if Bcount <= 0:
-                        Bvalue = 'NA'
-                    else:
-                        Bvalue = float(Bdata)/Bcount
-                elif bin_value == 'sum':
-                    Bvalue = Bdata
-                Bvalues.append(Bvalue)
+            last_idx = chr_size[chrom] // bin_step
+            for idx in range(last_idx + 1):
+                name_Bdata = chrom_bins.get(idx)
+                if name_Bdata is None:
+                    continue
 
-            bst = bin_step*idx
-            bed = min(bst + bin_size, chr_size[chr])
-            
-            s = [chr, str(bst), str(bed)]
-            s += [str(Bvalue) for Bvalue in Bvalues]
+                if skip_zero and sum(name_Bdata.values()) <= 0:
+                    continue
 
-            s = '\t'.join(s)
-            print(s, file=f)
-
-            #ID +=1
-            idx +=1
-                        
-    f.close()
+                name_Bcount = chr_Bcount.get(chrom, {}).get(idx, {})
+                row = _build_output_row(
+                    chrom,
+                    idx,
+                    chr_size,
+                    name_Bdata,
+                    name_Bcount,
+                    labels,
+                    bin_size,
+                    bin_step,
+                    bin_value,
+                )
+                print(row, file=f)
 
     print("Done", file=sys.stderr)
 
-    
+
+def Bin_data(data_fname,
+             chr_size,
+             bin_size,
+             bin_step,
+             bin_value,
+             skip_zero,
+             chr_list,
+             out_fname):
+    _validate_inputs(bin_size, bin_step, bin_value)
+
+    print("reading data file", file=sys.stderr)
+
+    chr_Bdata = {}
+    chr_Bcount = {}
+    labels = None
+    order = None
+    chr_set = set(chr_list)
+    layout = Helper_Py3.BinLayout(bin_size, bin_step)
+
+    for row_labels, _col_st, chrom, start, end, values in Helper_Py3.iter_gtab_records(data_fname):
+        if labels is None:
+            labels = row_labels
+
+        if chrom not in chr_set:
+            continue
+
+        order = _log_progress(chrom, start, order)
+
+        end = min(end, chr_size[chrom])
+        if end <= start:
+            continue
+
+        for idx, overlap_len in layout.iter_overlaps(start, end):
+            _accumulate_bin(chr_Bdata, chr_Bcount, chrom, idx, labels, values, overlap_len, bin_value)
+
+    if labels is None:
+        raise ValueError("input file has no GTAB records")
+
+    _write_output(out_fname, chr_Bdata, chr_Bcount, chr_size, chr_list, labels, bin_size, bin_step, bin_value, skip_zero)
+
+
 if __name__ == '__main__':
     parser = ArgumentParser(description='Binning data gtab file')
     parser.add_argument(metavar = '-f',

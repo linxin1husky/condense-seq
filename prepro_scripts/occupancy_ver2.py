@@ -1,8 +1,24 @@
-import sys, subprocess, re
+import sys
 from argparse import ArgumentParser
 import math
 import gzip
 import Helper_Py3_compat as Helper_Py3
+
+
+def _collect_input_labels(fnames):
+    data, label = [], []
+    for fname in fnames:
+        data.append(fname)
+        label.append(fname.rsplit('/', 1)[-1].split('.')[0])
+    return data, label
+
+
+def _record_mid_scores(chr_mid, ref_id, name, midscore_list):
+    chrom_mid = chr_mid.setdefault(ref_id, {})
+    for mid, score in midscore_list:
+        pos_scores = chrom_mid.setdefault(mid, {})
+        pos_scores[name] = pos_scores.get(name, 0) + score
+
 
 def NCP_occ (fnames,
              genome_size,
@@ -16,10 +32,8 @@ def NCP_occ (fnames,
              out_fname):
 
     # gather whole file names
-    data, label = [], []
-    for fname in fnames:
-        data.append(fname)
-        label.append(fname.rsplit('/', 1)[-1].split('.')[0])
+    data, label = _collect_input_labels(fnames)
+    chr_choices = set(chr_list)
 
     # make genome start-end profile dictionary
     chr_mid = {}
@@ -29,97 +43,20 @@ def NCP_occ (fnames,
         name = label[i]
         filename = data[i]
         print("reading %s" % (filename), file=sys.stderr)
-        samtools_proc = subprocess.Popen(
-            ["samtools", "view", "-F 0x10", filename],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-        )
-
-        for line in samtools_proc.stdout:
-            # skip the header
-            if line.startswith('@'):
-                continue
-            
-            cols = line.strip().split()
-            _, flag, ref_id, pos, _, cigar_str = cols[:6]
-
-            tlen = int(cols[8])
-            flag, pos = int(flag), int(pos)
-            ref_id = ref_id.strip()
-            pos-=1
-
-            # non target chromosome
-            if ref_id not in chr_list:
+        for cols in Helper_Py3.iter_samtools_view(filename, extra_args=["-F", "0x10"]):
+            record = Helper_Py3.parse_sam_record(cols)
+            if not Helper_Py3.passes_common_paired_filters(
+                record,
+                chr_choices=chr_choices,
+                min_len=min_len,
+                max_len=max_len,
+                mm_cutoff=mm_cutoff,
+                require_proper_pair=True,
+            ):
                 continue
 
-            # invalid: mapping failure
-            if pos < 0:
-                #type = 'invalid:mutant'
-                continue
-            if flag & 0x4 != 0:
-                #type = 'invalid:mutant'
-                continue
-            if ref_id == '*':
-                continue
-
-            # invalid: mate pairing failture
-            if flag & 0x8 != 0:
-                #type = 'invalid:mutant'
-                continue
-            if flag & 0x2 == 0:
-                continue
-
-
-            AS,NM,MD = None, None, None
-            for i in range(11, len(cols)):
-                col = cols[i]
-                if col.startswith('AS'):
-                    AS = int(col[5:])
-                elif col.startswith('NM'):
-                    NM = int(col[5:])
-                elif col.startswith('MD'):
-                    MD = col[5:]
-
-            # invalid: too large edit distance 
-            if NM > mm_cutoff:
-                #type = 'invalid:mutant'
-                continue
-
-            # invalid: not right size of read 
-            if abs(tlen) < min_len or abs(tlen) > max_len:
-                #type = 'invalid:mutant'
-                continue
-
-            # record mid-point of reads
-            if tlen > 0: # left read
-                end_pos = pos + tlen
-                if tlen % 2 != 0:
-                    midscore_list = [[pos + (tlen // 2), 1]]
-                else:
-                    midscore_list = [[pos + (tlen // 2) - 1, 0.5], [pos + (tlen // 2), 0.5]]
-            else: # right read
-                end_pos = pos
-                cigar_str=re.split(r'(\d+)',cigar_str)[1:]
-                for i in range(len(cigar_str)//2):
-                    s = cigar_str[2*i+1]
-                    num = int(cigar_str[2*i])
-                    if s == 'M' or s == 'D':
-                        end_pos += num
-                pos = end_pos + tlen
-                if tlen % 2 != 0:
-                    midscore_list = [[end_pos + (tlen // 2) - 1, 1]]
-                else:
-                    midscore_list = [[end_pos + (tlen // 2) - 1, 0.5], [end_pos + (tlen // 2), 0.5]]
-
-            if ref_id not in chr_mid:
-                chr_mid[ref_id] = {}
-            for mid, score in midscore_list:
-                if mid not in chr_mid[ref_id]:
-                    chr_mid[ref_id][mid] = {}
-                if name not in chr_mid[ref_id][mid]:
-                    chr_mid[ref_id][mid][name] = 0
-                chr_mid[ref_id][mid][name] += score
+            midscore_list = Helper_Py3.record_center_positions(record, even_policy="split")
+            _record_mid_scores(chr_mid, record.rname, name, midscore_list)
 
     chr_profile = {}
     # mark start-end position of nucleosome
@@ -190,10 +127,7 @@ def NCP_occ (fnames,
             for j in range(len(label)):
                 name = label[j]
                 past = previous[j]
-                try:
-                    current = past + chr_profile[chr][i][name]
-                except:
-                    current = past + 0
+                current = past + chr_profile[chr].get(i, {}).get(name, 0)
                 s += "\t" + str(current)
                 previous[j] = current
             if skip_zero and sum(previous) == 0:
@@ -242,7 +176,7 @@ if __name__ == '__main__':
                         nargs='?',
                         const=20,
                         default=None,
-                        help='Gaussain smoothing binwidth, default:20bp')
+                        help='Gaussian smoothing binwidth, default:20bp')
     parser.add_argument('--skip',
                         dest="skip_zero",
                         type=Helper_Py3.str2bool,
@@ -254,7 +188,7 @@ if __name__ == '__main__':
                         dest="chr_list",
                         type=str,
                         nargs='+',
-                        help='tagert chromosome list')
+                        help='target chromosome list')
     parser.add_argument('-o',
                         dest='out_fname',
                         default='output',

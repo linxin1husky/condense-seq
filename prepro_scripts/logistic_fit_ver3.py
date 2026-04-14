@@ -1,7 +1,6 @@
 import sys
 from argparse import ArgumentParser
 import warnings
-import gzip
 import Helper_Py3_compat as Helper_Py3
 import numpy as np
 from scipy.optimize import curve_fit
@@ -72,7 +71,7 @@ def logistic_fit (fnames,
     rsq_list = []
     total_count, fail_count = 0, 0
     
-    f = gzip.open(out_fname + '_4PL.gtab.gz', 'wt', encoding='utf-8', newline='\n')
+    f = Helper_Py3.open_any(out_fname + '_4PL.gtab.gz', "wt")
     
     for fname in fnames:
         print("Processing %s" % (fname.rsplit('/', 1)[-1]),
@@ -194,7 +193,7 @@ def logistic_fit (fnames,
                                                  bounds = bounds,
                                                  method='dogbox')
                     success = True
-                except:
+                except (RuntimeError, ValueError):
                     success = False
 
             elif method == 'evolution':
@@ -286,12 +285,14 @@ def logistic_fit (fnames,
     f.close()
 
     # summarize output
+    fail_pct = 0.0 if total_count <= 0 else 100 * float(fail_count) / total_count
+    median_rsq = float("nan") if not rsq_list else np.median(rsq_list)
     print("fitting failure %d/%d (%.2f %%)"
           % (fail_count,
              total_count,
-             100*float(fail_count)/total_count),
+             fail_pct),
           file=sys.stderr)
-    print("Median R-squared of fitting %.2f" % (np.median(rsq_list)), file=sys.stderr)
+    print("Median R-squared of fitting %.2f" % (median_rsq), file=sys.stderr)
     print("Done", file=sys.stderr)
     
 
@@ -369,14 +370,14 @@ if __name__ == '__main__':
                         dest="chr_list",
                         type=str,
                         nargs='+',
-                        help='tagert chromosome list')
+                        help='target chromosome list')
     parser.add_argument('--graph',
                         dest="graph_option",
                         type=str2bool,
                         nargs='?',
                         const=True,
                         default=False,
-                        help='plot the grpahs fitting the data')
+                        help='plot the graphs fitting the data')
     parser.add_argument('-o',
                         dest='out_fname',
                         default='output',

@@ -51,18 +51,17 @@ def NCP_count (peak_fname,
     for chr in sorted(chr_peak.keys(), key=Helper_Py3.chr_key):
         for NCPpos in sorted(chr_peak[chr].keys()):
             for name in target:
-                try:
-                    score = chr_peak[chr][NCPpos][name]
-                    if chr not in chr_st:
-                        chr_st[chr] = []
-                        chr_ed[chr] = []
-                    st = NCPpos - NCP_len // 2
-                    ed = NCPpos + NCP_len // 2
-                    if st not in chr_st:
-                        chr_st[chr].append(st)
-                        chr_ed[chr].append(ed)
-                except:
+                score = chr_peak[chr][NCPpos].get(name)
+                if score is None:
                     continue           
+                if chr not in chr_st:
+                    chr_st[chr] = []
+                    chr_ed[chr] = []
+                st = NCPpos - NCP_len // 2
+                ed = NCPpos + NCP_len // 2
+                if st not in chr_st[chr]:
+                    chr_st[chr].append(st)
+                    chr_ed[chr].append(ed)
 
     # reading coverage file and get NCP coverage
     print("reading coverage file", file=sys.stderr)
@@ -94,7 +93,7 @@ def NCP_count (peak_fname,
             prev_chr = chr
         if prev_chr is None:
             prev_chr = chr
-        if order == None:
+        if order is None:
             print(chr + " pos " + str(pos) +" is reading", file=sys.stderr)
             order = int(math.log10(max(pos, 1)))
         elif int(math.log10(max(pos, 1))) > order:
@@ -115,14 +114,15 @@ def NCP_count (peak_fname,
             for u in range(len(label)):
                 count = int(counts[u])
                 NCPcovs[k][u] += count
-    while chr_st[chr]:
-        chr_st[chr].pop(0)
-        NCPcovs.insert(0, [0]*len(label))
-    while chr_ed[chr]:
-        ed = chr_ed[chr].pop(0)
-        dyad = ed - NCP_len // 2
-        covs = NCPcovs.pop()
-        _store_cov(chr_Ncov, chr, dyad, covs, label)
+    if prev_chr is not None:
+        while chr_st[prev_chr]:
+            chr_st[prev_chr].pop(0)
+            NCPcovs.insert(0, [0]*len(label))
+        while chr_ed[prev_chr]:
+            ed = chr_ed[prev_chr].pop(0)
+            dyad = ed - NCP_len // 2
+            covs = NCPcovs.pop()
+            _store_cov(chr_Ncov, prev_chr, dyad, covs, label)
     
     # write NCP coverage file
     print("writing NCP coverage file", file=sys.stderr)
@@ -169,7 +169,7 @@ if __name__ == '__main__':
                         dest="chr_list",
                         type=str,
                         nargs='+',
-                        help='tagert chromosome list')
+                        help='target chromosome list')
     parser.add_argument('-o',
                         dest='out_fname',
                         default='output',

@@ -3,7 +3,7 @@
 # =========================================
 
 # Ignore OS-generated temporary files
-.DS_Store             # macOS
+.DS_Store             
 */.DS_Store
 Thumbs.db             # Windows
 ehthumbs.db           # Windows
@@ -29,7 +29,7 @@ config.local.json
 credentials.json
 
 # Ignore IDE/Editor specific files (adjust as needed)
-.vscode/              # VS Code settings directory
+.vscode/              
 .idea/                # JetBrains IDEs (IntelliJ, PyCharm, etc.)
 *.suo                   # Visual Studio Solution User Options
 *.user                  # Visual Studio
@@ -47,3 +47,6 @@ data/
 .Rhistory
 .ipynb_checkpoints/
 submit_on_terminal/
+prepro_scripts/WIP.md
+postpro_scripts/WIP.md
+*/notSureHowToUse/
