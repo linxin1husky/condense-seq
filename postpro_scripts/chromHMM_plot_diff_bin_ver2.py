@@ -3,12 +3,11 @@ import graphics
 import statis
 import sys
 import copy
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 import matplotlib.pyplot as plt
 import numpy as np
 import math
-import Interval_dict
-
+import Interval_dict_dependency as Interval_dict
 ## for H1
 H1_name_dict = {"E1":"Polycomb repressed",
              "E2":"Poised promoter",

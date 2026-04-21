@@ -1,5 +1,5 @@
 import sys
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 import numpy as np
 import matplotlib.pyplot as plt
 import load_file

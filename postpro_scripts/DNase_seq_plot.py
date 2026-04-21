@@ -3,7 +3,7 @@ import graphics
 import statis
 import sys
 import copy
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 import matplotlib.pyplot as plt
 import numpy as np
 import math
@@ -30,8 +30,8 @@ def read_data (fname, chr_target, score_col=6):
 
 dID_interval1, dID_DNase1 = read_data("data/ENCFF706BCL_peaks.bed", "chr1")
 dID_interval2, dID_DNase2 = read_data("data/ENCFF554RWR_hotspots.bed", "chr1", score_col=4)
-dinterval_dict1 = Interval_dict.double_hash(dID_interval1, 10000, 250000000)
-dinterval_dict2 = Interval_dict.double_hash(dID_interval2, 10000, 250000000)
+dinterval_dict1 = Interval_dict.GenomicIntervalIndex(dID_interval1, 10000, 250000000)
+dinterval_dict2 = Interval_dict.GenomicIntervalIndex(dID_interval2, 10000, 250000000)
 
 ID_chr, ID_pos, name_ID_value = load_file.read_anot_file("data/hg19_chr1_171_everything_anot.cn")
 

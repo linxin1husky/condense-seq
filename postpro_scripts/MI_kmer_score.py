@@ -4,12 +4,12 @@ import statis
 import sys
 import copy
 import pickle
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 import matplotlib.pyplot as plt
 import numpy as np
 import math
 import random
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 from scipy import stats
 from mpl_toolkits.axes_grid1 import ImageGrid
 from SliderClass import Slider

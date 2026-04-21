@@ -3,12 +3,11 @@ import graphics
 import statis
 import sys
 import copy
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 import matplotlib.pyplot as plt
 import numpy as np
 import math
-import Interval_dict
-
+import Interval_dict_dependency as Interval_dict
 def multi_boxplot (key_values_list,
                    axhline=None,
                    ylabel='Condensability (A.U.)',

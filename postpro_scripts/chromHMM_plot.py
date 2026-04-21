@@ -3,12 +3,11 @@ import graphics
 import statis
 import sys
 import copy
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 import matplotlib.pyplot as plt
 import numpy as np
 import math
-import Interval_dict
-
+import Interval_dict_dependency as Interval_dict
 def read_chromHMM(fname, chr_target, change=False):
     state_intervals = {}
     for line in open(fname):
@@ -69,7 +68,7 @@ for state in state_intervals:
         assert dID not in dID_interval
         dID_interval[dID] = intervals[i]
 
-dinterval_dict = Interval_dict.double_hash(dID_interval, 10000, 250000000)
+dinterval_dict = Interval_dict.GenomicIntervalIndex(dID_interval, 10000, 250000000)
 
 ID_chr, ID_pos, name_ID_value = load_file.read_anot_file("data/hg19_chr1_171_everything_anot.cn")
 

@@ -3,8 +3,7 @@ import numpy as np
 import seaborn as sns
 import copy
 import math
-import Interval_dict
-
+import Interval_dict_dependency as Interval_dict
 #parameters
 win_size = 171
 chr_target = 'chr1'
@@ -171,7 +170,7 @@ def read_hgtable(fname, chr_target):
             Prom_count +=1
     return ID_interval
 ID_interval = read_hgtable("data/hgTables", chr_target)
-Region_category = Interval_dict.double_hash(ID_interval, 10000, genome_size[chr_target])
+Region_category = Interval_dict.GenomicIntervalIndex(ID_interval, 10000, genome_size[chr_target])
 
 def categorize (IDs, ID_pos, Region_category):
     category_IDs = {"inter":[], "multi":[], "TSS":[], "TTS":[], "Prom":[], "Body":[]}

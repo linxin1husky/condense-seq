@@ -3,7 +3,7 @@ import graphics
 import statis
 import sys
 import copy
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 import matplotlib.pyplot as plt
 import numpy as np
 import math
@@ -99,7 +99,7 @@ path = ""
 ID_interval, ID_score1, ID_score2 = read_binfile(path + "H1_NCP_sp_1kb_bin.cn", chr_choice="chr1")
 lID_score, lID_interval = read_ATAC_foldchange(path + "H1_ATAC_foldchange.bedgraph", chr_choice="chr1")
 
-interval_dict = Interval_dict.double_hash(ID_interval, 100000, 250000000)
+interval_dict = Interval_dict.GenomicIntervalIndex(ID_interval, 100000, 250000000)
 
 for lID in lID_score:
     rst, red = lID_interval[lID]

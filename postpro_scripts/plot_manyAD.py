@@ -1,5 +1,5 @@
 import load_file_python3
-import Interval_dict_python3
+import Interval_dict_dependency as Interval_dict
 import sys
 import copy
 import pickle
@@ -370,7 +370,7 @@ for chr_name in chr_list:
                 sID = (state, k)
                 sID_interval[sID] = intervals[k]
 
-        state_dict = Interval_dict_python3.double_hash(sID_interval,
+        state_dict = Interval_dict.GenomicIntervalIndex(sID_interval,
                                                        domain_size=10000,
                                                        max_pos=5*10**8)
         dname_dict[dname] = state_dict

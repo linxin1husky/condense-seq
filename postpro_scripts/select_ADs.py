@@ -1,5 +1,4 @@
-import Interval_dict
-
+import Interval_dict_dependency as Interval_dict
 def chr_cmp (chr1, chr2):
     try:
         chrnum1 = int(chr1[3:])
@@ -109,7 +108,7 @@ for name in names:
                 sID = (state, k)
                 sID_interval[sID] = intervals[k]
 
-        state_dict = Interval_dict.double_hash(sID_interval,
+        state_dict = Interval_dict.GenomicIntervalIndex(sID_interval,
                                                domain_size=10000,
                                                max_pos=5*10**8)
 

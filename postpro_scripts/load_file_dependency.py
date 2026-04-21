@@ -1,20 +1,27 @@
+from __future__ import annotations
+
 import copy
-import re
+import csv
 import glob
+import logging
+import re
+
 import numpy as np
 import statis_edit as statis
-import Helper_Py3
-import logging
+from shared import condense_helper as ch
+
 
 # read titration file
 def read_titration (fname):
     tnum_conc = {}
     tnum_frac = {}
-    for line in Helper_Py3.gzopen(fname):
+    for line in ch.open_text(fname):
         line = line.strip()
         if not line:
             continue
         cols = line.split('\t')
+        if len(cols) < 3:
+            continue
         conc, frac, tnum = cols[0], cols[-2], cols[-1]
         try:
             tnum = int(tnum)
@@ -31,7 +38,7 @@ def read_rlen_file (fname,
                     chr_list=None):
     rlen_count = {}
     First = True
-    for line in Helper_Py3.gzopen(fname):
+    for line in ch.open_text(fname):
         if First:
             First = False
             continue
@@ -64,47 +71,46 @@ def read_csv_file (fname,
     First = True
     counter = -1
 
-    #for cols in csv.reader(open(fname), delimiter=delim):
-    for cols in csv.reader(codecs.EncodedFile(Helper_Py3.gzopen(fname),
-                                              'utf-8',
-                                              'utf-8-sig'),
-                           delimiter=delim):
+    with ch.open_text(fname, encoding='utf-8-sig') as handle:
+        rows = csv.reader(handle, delimiter=delim)
 
-        if First and header:
-            field_names = cols[col_st:]
-            First = False
-            continue
-        elif First and not header:
-            field_names = range(len(cols[col_st:]))
-            First = False
-            pass
+        for cols in rows:
 
-        counter += 1
-        if jump and counter % jump != 0:
-            continue
+            if First and header:
+                field_names = cols[col_st:]
+                First = False
+                continue
+            elif First and not header:
+                field_names = range(len(cols[col_st:]))
+                First = False
+                pass
 
-        if rowID:
-            ID = cols[0]
-        else:
-            ID = counter
+            counter += 1
+            if jump and counter % jump != 0:
+                continue
 
-        if ID not in ID_field_value:
-            ID_field_value[ID] = {}
-
-        cols = cols[col_st:]
-        #print cols
-        for i in range(len(cols)):
-            field = field_names[i]
-            try:
-                value = float(cols[i])
-            except:
-                value = cols[i]
-            if field not in ID_field_value[ID]:
-                ID_field_value[ID][field] = value
+            if rowID:
+                ID = cols[0]
             else:
-                if type(ID_field_value[ID][field]) != list:
-                    ID_field_value[ID][field] = [ID_field_value[ID][field]]
-                ID_field_value[ID][field].append(value)
+                ID = counter
+
+            if ID not in ID_field_value:
+                ID_field_value[ID] = {}
+
+            cols = cols[col_st:]
+            #print cols
+            for i in range(len(cols)):
+                field = field_names[i]
+                try:
+                    value = float(cols[i])
+                except:
+                    value = cols[i]
+                if field not in ID_field_value[ID]:
+                    ID_field_value[ID][field] = value
+                else:
+                    if type(ID_field_value[ID][field]) != list:
+                        ID_field_value[ID][field] = [ID_field_value[ID][field]]
+                    ID_field_value[ID][field].append(value)
 
     if mode == 'row':
         return ID_field_value
@@ -147,7 +153,7 @@ def read_tabular_file (fname,
     First = True
     counter = 0
 
-    for line in Helper_Py3.gzopen(fname):
+    for line in ch.open_text(fname):
         if skip_first > counter:
             counter +=1
             continue
@@ -156,7 +162,7 @@ def read_tabular_file (fname,
         
         if First:
             if header:            
-                if field_choices == None:
+                if field_choices is None:
                     field_names = cols[col_st:]
                     field_idxs = range(col_st, len(cols))
                 else:
@@ -198,7 +204,7 @@ def read_tabular_file (fname,
                 if skip_nan:
                     continue
                 else:
-                    value = np.NaN
+                    value = np.nan
 
             if field not in ID_field_value[ID]:
                 ID_field_value[ID][field] = value
@@ -254,7 +260,7 @@ def read_gtab(fname,
 
     First = True
     data_type = None
-    for line in Helper_Py3.gzopen(fname):
+    for line in ch.open_text(fname):
         line = line.strip()
 
         if not line:
@@ -272,7 +278,7 @@ def read_gtab(fname,
                 col_st = 3
             # print(f"DEBUG: the column name is defined: data_type - {data_type}, col_st - {col_st}")
             
-            if field_choices == None:
+            if field_choices is None:
                 # print(f"DEBUG: the field_choices is NOT specified. number of columns: {len(cols)}")
                 field_names = cols[col_st:]
                 field_idxs = range(col_st, len(cols))
@@ -296,7 +302,7 @@ def read_gtab(fname,
             chr, start, end = cols[:col_st]
             ID = (chr, int(start), int(end))
 
-        if chr_choices != None and chr not in chr_choices:
+        if chr_choices is not None and chr not in chr_choices:
             continue
                  
         for field, k in zip(field_names, field_idxs):
@@ -310,7 +316,7 @@ def read_gtab(fname,
                 if skip_nan:
                     continue
                 else:
-                    value = np.NaN
+                    value = np.nan
 
             if by_chr:
                 if mode in ['row', 'both']:
@@ -427,7 +433,7 @@ def read_gtab_batch (dinfo_dkey,
                                            by_chr=by_chr)
 
 
-            if field_dkey == None:
+            if field_dkey is None:
                 field_dkey = {field:field for field in field_ID_value.keys()}
 
             if by_chr:
@@ -486,11 +492,11 @@ def read_bedgraph (fname,
     else:
         ID_value = {}
 
-    if chr_choices != None:
+    if chr_choices is not None:
         target_chr = None
         target_chrs = copy.deepcopy(chr_choices)
 
-    for line in open(fname):
+    for line in ch.open_text(fname):
         line = line.strip()
 
         if not line:
@@ -502,7 +508,7 @@ def read_bedgraph (fname,
         except:
             continue
 
-        if chr_choices != None:
+        if chr_choices is not None:
             if chr != target_chr:
                 if len(target_chrs) == 0:
                     break
@@ -527,7 +533,7 @@ def read_bedgraph (fname,
             if skip_nan:
                 continue
             else:
-                value = np.NaN
+                value = np.nan
 
         if by_chr:
             try:
@@ -557,7 +563,7 @@ def read_ENCODEpeak (fname,
     else:
         ID_value = {}
     
-    for line in Helper_Py3.gzopen(fname):
+    for line in ch.open_text(fname):
         cols = line.strip().split()
         chr, st, ed, peakname, _, strand, signal, pvalue, qvalue = cols[:9]
 
@@ -594,7 +600,7 @@ def read_ENCODEpeak (fname,
 def read_genome_size(fname,
                      chr_choices=None):
     genome_size = {}
-    for line in Helper_Py3.gzopen(fname):
+    for line in ch.open_text(fname):
         line = line.strip()
         if line.startswith('>'):
             chr = line.split()[0][1:]
@@ -614,7 +620,7 @@ def read_Gband (fname,
 
     chr_ID_Gband = {}
     ID = 0
-    for line in Helper_Py3.gzopen(fname):
+    for line in ch.open_text(fname):
         if line.startswith("#"):
             continue
         cols = line.strip().split()
@@ -651,7 +657,7 @@ def read_chromHMM(fname,
                   state_name=None):
     
     chr_state_intervals = {}
-    for line in Helper_Py3.gzopen(fname):
+    for line in ch.open_text(fname):
         cols = line.strip().split()
         chr, st, ed, state = cols[:4]
         if chr_choices and chr not in chr_choices:
@@ -676,7 +682,7 @@ def read_profile(fname,
 
     name_ID_profile = {}
     First = True
-    for line in Helper_Py3.gzopen(fname):
+    for line in ch.open_text(fname):
         line = line.strip()
         if not line:
             continue
@@ -706,11 +712,11 @@ def read_profile(fname,
             try:
                 value = float(value)
             except:
-                value = np.NaN
+                value = np.nan
             profile.append(value)
         profile = np.asarray(profile)
         
-        if moving_win != None:
+        if moving_win is not None:
             profile = statis.moving_average(profile, moving_win)
         name_ID_profile[name][ID] = profile
 
@@ -756,11 +762,12 @@ def read_profile_batch (dinfo_dkey,
                 print(f"loading {(fname.rsplit('/')[-1])}") 
 
             if average:
-                field_mprofile = read_profile(fname,
-                                              name_choice=field_choices,
-                                              ID_choice=ID_choice,
-                                              strip_ver=strip_ver,
-                                              moving_win=moving_win)
+                field_mprofile, _ = read_profile(fname,
+                                                 name_choice=field_choices,
+                                                 ID_choice=ID_choice,
+                                                 strip_ver=strip_ver,
+                                                 moving_win=moving_win,
+                                                 average=True)
             else:
                 field_geneID_profile = read_profile(fname,
                                                     name_choice=field_choices,
@@ -802,7 +809,7 @@ def read_GTF (fname,
               strip_ver=True):
 
     ID_field_values = {}
-    for line in open(fname):
+    for line in ch.open_text(fname):
         if line.startswith("#"):
             continue
         cols = line.strip().split('\t')
@@ -825,24 +832,18 @@ def read_GTF (fname,
         start = int(start) - 1
         end = int(end) - 1
 
-        # parse tags
-        attcols = attribute.strip(';').split('; ')
-        tag_value = {}
-        for item in attcols:
-            tag, value = item.strip().split(' ')
-            value = value.strip('"')
-            tag_value[tag] = value
+        tag_value = ch.parse_gtf_attributes(attribute)
 
         geneID = tag_value["gene_id"]
         # strip off version information
         if strip_ver:
             geneID = geneID.split('.')[0]
 
-        if geneIDs and geneID not in geneID:
+        if geneIDs and geneID not in geneIDs:
             continue
 
-        geneType = tag_value["gene_type"]
-        geneName = tag_value["gene_name"]
+        geneType = tag_value.get("gene_type", tag_value.get("gene_biotype", "NA"))
+        geneName = tag_value.get("gene_name", geneID)
 
         if gene_names and geneName not in gene_names:
             continue
@@ -864,10 +865,8 @@ def read_GTF (fname,
             # strip off version information
             if strip_ver:
                 txpID = txpID.split('.')[0]
-            if "txps" not in ID_field_values[geneID]:
-                ID_field_values[geneID]["txps"] = {}
-            if txpID not in ID_field_values[geneID]['txps']:
-                ID_field_values[geneID]['txps'][txpID] = {}
+            ID_field_values[geneID].setdefault("txps", {})
+            ID_field_values[geneID]["txps"].setdefault(txpID, {})
         except:
             txpID = None
             pass
@@ -881,6 +880,8 @@ def read_GTF (fname,
             ID_field_values[geneID]["TTS"] = TTS
 
         elif feature == "transcript":
+            if txpID is None:
+                continue
             if strand == "+":
                 TSS, TTS = start, end
             else:
@@ -894,11 +895,15 @@ def read_GTF (fname,
                 ID_field_values[geneID]["exons"] = []
             ID_field_values[geneID]["exons"].append((start, end))
             # save all exons for each transcripts   
-            if "exons" not in ID_field_values[geneID]["txps"][txpID]:
-                ID_field_values[geneID]["txps"][txpID]["exons"] = []
-            ID_field_values[geneID]["txps"][txpID]["exons"].append((start, end))
+            if txpID is not None:
+                ID_field_values[geneID].setdefault("txps", {}).setdefault(txpID, {})
+                if "exons" not in ID_field_values[geneID]["txps"][txpID]:
+                    ID_field_values[geneID]["txps"][txpID]["exons"] = []
+                ID_field_values[geneID]["txps"][txpID]["exons"].append((start, end))
             
         elif feature == "start_codon":
+            if txpID is None:
+                continue
             if strand == "+":
                 CSS = start
             else:
@@ -924,6 +929,8 @@ def read_GTF (fname,
                     ID_field_values[geneID]["txps"][txpID]["CSS"].append(CSS)                  
                 
         elif feature == "stop_codon":
+            if txpID is None:
+                continue
             if strand == "+":
                 CTS = end
             else:
@@ -951,6 +958,8 @@ def read_GTF (fname,
     # merge overalpping exons for each genes
     if merge_exons:
         for geneID in ID_field_values:
+            if "exons" not in ID_field_values[geneID]:
+                continue
             exons = sorted(ID_field_values[geneID]["exons"])
             new_exons = []
             for exon in exons:
@@ -989,7 +998,7 @@ def read_ENCODE_RNA_seq (fname,
                          unit='FPKM'):    
     First = True
     geneID_value = {}
-    for line in open(fname):
+    for line in ch.open_text(fname):
         if First:
             First = False
             continue
@@ -1020,8 +1029,8 @@ def get_FPKM (count_fname,
                                             field_choices=field_choices)
 
     ## read GTF file and compute exon lengths if not provided
-    if geneID_exonlen == None:
-        assert GTF_fname != None
+    if geneID_exonlen is None:
+        assert GTF_fname is not None
         geneID_field_value = read_GTF(GTF_fname)
         geneID_exonlen = {}
         for geneID in geneID_field_value:
@@ -1034,6 +1043,7 @@ def get_FPKM (count_fname,
     # compute FPKM
     field_geneID_FPKM = {}
     for field in field_geneID_count:
+        geneID_count = field_geneID_count[field]
         
         # normalize by total count
         total_count = 0
@@ -1062,7 +1072,7 @@ def get_FPKM (count_fname,
 # read GSEA rank file
 def read_rank (fname):
     gene_value = {}
-    for line in open(fname):
+    for line in ch.open_text(fname):
         line = line.strip()
         if not line:
             continue
@@ -1077,7 +1087,7 @@ def read_GSEA (path):
     def read_report (fname, cutoff=100):
         gs_list = []
         First = True
-        for line in open(fname):
+        for line in ch.open_text(fname):
             if First:
                 First = False
                 continue
@@ -1103,7 +1113,7 @@ def read_GSEA (path):
     def read_gs (fname):
         gene_info = {}
         First = True
-        for line in open(fname):
+        for line in ch.open_text(fname):
             if First:
                 First = False
                 continue
@@ -1146,3 +1156,172 @@ def read_GSEA (path):
 
     return pos_gs_list, neg_gs_list
 
+
+# -----------------------------------------------------------------------------
+# Compatibility functions present in load_file.py but absent from load_file_edit.py
+
+
+def norm(L):
+    total = sum(L)
+    return [L[i] / float(total) for i in range(len(L))]
+
+
+def read_anot_file(fname, chr_choice=None, target_names=None, jump=None, num_max=None):
+    if num_max is None:
+        import sys
+        num_max = sys.maxsize
+    ID_chr = {}
+    name_ID_value = {}
+    first = True
+    count = 0
+    counter = -1
+    for line in ch.open_text(fname):
+        if count > num_max:
+            break
+        cols = line.strip().split()
+        if not cols:
+            continue
+        if first:
+            if cols[2] == 'PhysicalPosition':
+                dtype = 'point'
+                ID_pos = {}
+                col_st = 3
+                names = cols[col_st:]
+            elif cols[2] == 'Start' and cols[3] == 'End':
+                dtype = 'bin'
+                ID_start, ID_end = {}, {}
+                col_st = 4
+                names = cols[col_st:]
+            else:
+                raise ValueError(f'Unrecognized annotation header in {fname}')
+            first = False
+            continue
+        counter += 1
+        if jump and counter % jump != 0:
+            continue
+
+        if dtype == 'point':
+            ID, chrom, pos = int(cols[0]), cols[1], int(cols[2])
+        else:
+            ID, chrom, start, end = int(cols[0]), cols[1], int(cols[2]), int(cols[3])
+            ID_start[ID] = start
+            ID_end[ID] = end
+
+        if chr_choice is not None and chrom not in chr_choice:
+            continue
+        ID_chr[ID] = chrom
+
+        if dtype == 'point':
+            ID_pos[ID] = pos
+        else:
+            ID_start[ID] = start
+            ID_end[ID] = end
+
+        for name, raw in zip(names, cols[col_st:]):
+            if target_names and name not in target_names:
+                continue
+            name_ID_value.setdefault(name, {})
+            if ID in name_ID_value[name]:
+                raise AssertionError(f'Duplicate ID {ID} for field {name}')
+            value = ch.coerce_value(raw, na_to_nan=True)
+            name_ID_value[name][ID] = value
+        count += 1
+    if dtype == 'point':
+        return ID_chr, ID_pos, name_ID_value
+    return ID_chr, ID_start, ID_end, name_ID_value
+
+
+def read_tsv(fname):
+    first = True
+    geneID_FPKM = {}
+    for line in ch.open_text(fname):
+        if first:
+            first = False
+            continue
+        cols = line.strip().split()
+        if not cols:
+            continue
+        geneID, FPKM = cols[0], float(cols[6])
+        geneID = geneID.split('.')[0]
+        geneID_FPKM[geneID] = FPKM
+    return geneID_FPKM
+
+
+# load_file.py historical name. load_file_edit.py keeps a richer read_GTF implementation.
+read_GTF_old = read_GTF
+
+
+# Score readers from load_file.py kept for compatibility.
+def read_score(fname, chr_choice=None):
+    ID_pos = {}
+    name_ID_score = {}
+    first = True
+    for line in ch.open_text(fname):
+        line = line.strip()
+        if not line:
+            continue
+        cols = line.split('\t')
+        if first:
+            names = cols[3:]
+            first = False
+            continue
+        ID, chrom, pos = cols[:3]
+        if chr_choice is not None and chrom not in chr_choice:
+            continue
+        ID = chrom + ':' + ID
+        ID_pos[ID] = int(pos)
+        scores = [float(score) for score in cols[3:]]
+        for name, score in zip(names, scores):
+            name_ID_score.setdefault(name, {})[ID] = score
+    return ID_pos, name_ID_score
+
+
+def read_bin_score(fname, chr_choice=None):
+    name_chr_range_score = {}
+    first = True
+    for line in ch.open_text(fname):
+        line = line.strip()
+        if not line:
+            continue
+        cols = line.split('\t')
+        if first:
+            names = cols[4:]
+            first = False
+            continue
+        ID, chrom, st, ed = cols[:4]
+        if chr_choice is not None and chrom not in chr_choice:
+            continue
+        st, ed = int(st), int(ed)
+        scores = [float(score) for score in cols[4:]]
+        for name, score in zip(names, scores):
+            name_chr_range_score.setdefault(name, {}).setdefault(chrom, {})[(st, ed)] = score
+    return name_chr_range_score
+
+
+def read_bin_score_new(fname, chr_choice=None):
+    ID_chr_range = {}
+    name_ID_score = {}
+    first = True
+    for line in ch.open_text(fname):
+        line = line.strip()
+        if not line:
+            continue
+        cols = line.split('\t')
+        if first:
+            names = cols[4:]
+            first = False
+            continue
+        ID, chrom, st, ed = cols[:4]
+        if chr_choice is not None and chrom not in chr_choice:
+            continue
+        st, ed = int(st), int(ed)
+        if ID in ID_chr_range:
+            raise AssertionError(f'Duplicate ID: {ID}')
+        ID_chr_range[ID] = [chrom, (st, ed)]
+        scores = [float(score) for score in cols[4:]]
+        for name, score in zip(names, scores):
+            name_ID_score.setdefault(name, {})
+            if ID in name_ID_score[name]:
+                raise AssertionError(f'Duplicate ID {ID} for field {name}')
+            name_ID_score[name][ID] = score
+    return ID_chr_range, name_ID_score

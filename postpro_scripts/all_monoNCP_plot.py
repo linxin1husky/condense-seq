@@ -3,12 +3,12 @@ import graphics
 import statis
 import sys
 import copy
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 from matplotlib import cm
 import matplotlib.pyplot as plt
 import numpy as np
 import math
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 from scipy.stats import gaussian_kde
 from matplotlib.colors import Normalize 
 from scipy.interpolate import interpn

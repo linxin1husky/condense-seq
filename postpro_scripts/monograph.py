@@ -6,8 +6,7 @@ import copy
 import math
 from pyliftover import LiftOver
 from Bio import SeqIO
-import Interval_dict
-
+import Interval_dict_dependency as Interval_dict
 """
 def read_anot_file(fname):
     ID_dyad = {}

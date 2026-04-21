@@ -9,7 +9,7 @@ import matplotlib as mpl
 from hmmlearn import hmm
 import scipy.stats as stats
 import pickle
-import Interval_dict_python3 as Interval_dict
+import Interval_dict_dependency as Interval_dict
 import copy
 
 def read_bedgraph(fname):
@@ -95,7 +95,7 @@ name_values = {}
 for chr in chr_list:
     minbinID, maxbinID = chr_range[chr]
     binID_interval = {i:(i*bin_size, (i+1)*bin_size) for i in range(minbinID, maxbinID)}
-    bin_dict = Interval_dict.bin_hash(binID_interval, 
+    bin_dict = Interval_dict.RegularGenomeBins(binID_interval, 
                                       bin_size=bin_size,
                                       bin_step=bin_size,
                                       max_pos=maxbinID*bin_size)

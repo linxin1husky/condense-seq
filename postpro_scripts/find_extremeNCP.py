@@ -3,12 +3,11 @@ import graphics
 import statis
 import sys
 import copy
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 import matplotlib.pyplot as plt
 import numpy as np
 import math
-import Interval_dict
-
+import Interval_dict_dependency as Interval_dict
 def all_path (N, states='ATCG'):
     if N==1:
         return list(states)
@@ -268,7 +267,7 @@ for ID in ID_field_values:
         dID_interval["Body:" + ID] = [Body_st, Body_ed]
     if Prom_ed - Prom_st > 0:
         dID_interval["Prom:" + ID] = [Prom_st, Prom_ed]
-dinterval_dict = Interval_dict.double_hash(dID_interval, 100000, genome_size['chr1'])
+dinterval_dict = Interval_dict.GenomicIntervalIndex(dID_interval, 100000, genome_size['chr1'])
 
 ID_dtype = {}
 
@@ -379,7 +378,7 @@ for state in state_intervals:
         assert dID not in dID_interval
         dID_interval[dID] = intervals[i]
 
-dinterval_dict = Interval_dict.double_hash(dID_interval, 10000, 250000000)
+dinterval_dict = Interval_dict.GenomicIntervalIndex(dID_interval, 10000, 250000000)
 
 ID_dtype = {}
 

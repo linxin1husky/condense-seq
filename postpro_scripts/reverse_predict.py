@@ -2,7 +2,7 @@ import math
 import re
 import numpy as np
 import os, sys, subprocess, re
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 import load_file
 import matplotlib.pyplot as plt
 

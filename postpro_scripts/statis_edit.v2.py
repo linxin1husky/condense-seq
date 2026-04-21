@@ -11,8 +11,7 @@ import sklearn.cluster
 from scipy.cluster.hierarchy import linkage, dendrogram, fcluster
 from scipy.spatial.distance import squareform
 import scipy.stats
-import Interval_dict_python3
-
+import Interval_dict_dependency as Interval_dict
 # get histogram
 def get_hist (data, binnum=1000, prob=False):
     hist={};
@@ -659,7 +658,7 @@ def categorize (state_intervals,
                 assert dID not in dID_interval
                 dID_interval[dID] = intervals[i]
         
-        state_dict = Interval_dict_python3.double_hash(dID_interval,
+        state_dict = Interval_dict.GenomicIntervalIndex(dID_interval,
                                                max_pos=max_pos,
                                                domain_size=domain_size,
                                                silent=silent)
@@ -698,7 +697,7 @@ def categorize_bin (state_intervals,
                 assert dID not in dID_interval
                 dID_interval[dID] = intervals[i]
 
-        state_dict = Interval_dict_python3.double_hash(dID_interval,
+        state_dict = Interval_dict.GenomicIntervalIndex(dID_interval,
                                                max_pos=max_pos,
                                                domain_size=domain_size,
                                                silent=silent)
@@ -744,7 +743,7 @@ def categorize_rbin (state_intervals,
 
     # if hash function not provided
     if hash_func == None:
-        bin_dict = Interval_dict_python3.bin_hash(bin_size,
+        bin_dict = Interval_dict.RegularGenomeBins(bin_size,
                                           bin_step,
                                           max_pos=max_pos,
                                           ID_interval=binID_interval,
@@ -792,7 +791,7 @@ def bin_data_mean (binID_interval,
 
     # if hash function not provided
     if hash_func == None:
-        Int_dict = Interval_dict_python3.double_hash(binID_interval,
+        Int_dict = Interval_dict.GenomicIntervalIndex(binID_interval,
                                              domain_size=domain_size,
                                              max_pos=max_pos,
                                              silent=silent)
@@ -1233,16 +1232,16 @@ def get_CohenD_pair (key_values,
     return pair_CohenD
 
 if __name__ == "__main__":
-    import Interval_dict_python3, inspect
-
-    print("Interval_dict_python3 path:", Interval_dict_python3.__file__)
-    print("bin_hash object:", Interval_dict_python3.bin_hash)
-    print("bin_hash is class?", isinstance(Interval_dict_python3.bin_hash, type))
+    import Interval_dict_dependency as Interval_dict
+    import inspect
+    print("Interval_dict_dependency path:", Interval_dict.__file__)
+    print("bin_hash object:", Interval_dict.RegularGenomeBins)
+    print("bin_hash is class?", isinstance(Interval_dict.RegularGenomeBins, type))
 
     # If it's a class, inspect __init__. If it's a function, inspect it directly.
-    if isinstance(Interval_dict_python3.bin_hash, type):
-        print("bin_hash.__init__ signature:", inspect.signature(Interval_dict_python3.bin_hash.__init__))
+    if isinstance(Interval_dict.RegularGenomeBins, type):
+        print("bin_hash.__init__ signature:", inspect.signature(Interval_dict.RegularGenomeBins.__init__))
     else:
-        print("bin_hash signature:", inspect.signature(Interval_dict_python3.bin_hash))
+        print("bin_hash signature:", inspect.signature(Interval_dict.RegularGenomeBins))
 
 

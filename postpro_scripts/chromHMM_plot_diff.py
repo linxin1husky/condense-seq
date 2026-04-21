@@ -3,12 +3,11 @@ import graphics
 import statis
 import sys
 import copy
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 import matplotlib.pyplot as plt
 import numpy as np
 import math
-import Interval_dict
-
+import Interval_dict_dependency as Interval_dict
 ## for H1
 H1_name_dict = {"E1":"Polycomb repressed",
              "E2":"Poised promoter",
@@ -267,7 +266,7 @@ def categorize (state_intervals, ID_pos, ID_value):
             assert dID not in dID_interval
             dID_interval[dID] = intervals[i]
 
-    dinterval_dict = Interval_dict.double_hash(dID_interval, 10000, 250000000)
+    dinterval_dict = Interval_dict.GenomicIntervalIndex(dID_interval, 10000, 250000000)
 
     state_values = {}
     for ID in ID_pos:
@@ -382,7 +381,7 @@ for state in state_intervals:
         assert dID not in dID_interval
         dID_interval[dID] = intervals[i]
 
-dinterval_dict = Interval_dict.double_hash(dID_interval, 10000, 250000000)
+dinterval_dict = Interval_dict.GenomicIntervalIndex(dID_interval, 10000, 250000000)
 
 state_name_values = {}
 name_state_values = {}

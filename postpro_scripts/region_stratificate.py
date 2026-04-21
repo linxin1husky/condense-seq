@@ -3,7 +3,7 @@ import graphics
 import statis
 import sys
 import copy
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np

@@ -3,7 +3,7 @@ import graphics
 import statis
 import sys
 import copy
-import Interval_dict
+import Interval_dict_dependency as Interval_dict
 import matplotlib.pyplot as plt
 import numpy as np
 import math
@@ -42,7 +42,7 @@ def read_TADfile (fname):
 #TAD_interval = read_TADfile(path + "WT_contact_domain_list/5000_blocks.bedpe"
 TAD_interval = read_TADfile(path + "TAD_chr1_5kb.bedpe")
 
-TADinterval_dict = Interval_dict.double_hash(TAD_interval, 100000, 250000000)
+TADinterval_dict = Interval_dict.GenomicIntervalIndex(TAD_interval, 100000, 250000000)
 
 OutTAD_IDs, InTAD_IDs = [], []
 for ID in ID_pos:
@@ -97,7 +97,7 @@ box_data_list = []
 for fname in fnames:
     eigen_list, interval_list = read_eigenfile(path+fname, bin_size=100000)        
     eID_interval = {i:interval_list[i] for i in range(len(interval_list))}
-    eID_dict = Interval_dict.double_hash(eID_interval, 100000, 250000000)
+    eID_dict = Interval_dict.GenomicIntervalIndex(eID_interval, 100000, 250000000)
     A_IDs, B_IDs = [], []
     for ID in ID_pos:
         pos = ID_pos[ID]
@@ -166,7 +166,7 @@ def read_subcompartment (fname, chr_choice='chr1'):
     return subID_interval
 
 subID_interval = read_subcompartment (path+"GSE63525_GM12878_subcompartments.bed")
-subID_dict = Interval_dict.double_hash(subID_interval, 100000, 250000000)
+subID_dict = Interval_dict.GenomicIntervalIndex(subID_interval, 100000, 250000000)
 sub_IDs = {}
 for ID in ID_pos:
     pos = ID_pos[ID]
