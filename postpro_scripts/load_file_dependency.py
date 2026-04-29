@@ -5,9 +5,17 @@ import csv
 import glob
 import logging
 import re
+import sys
+from pathlib import Path
 
 import numpy as np
 import statis_edit as statis
+
+_SCRIPT_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _SCRIPT_DIR.parent
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(_PROJECT_ROOT))
+
 from shared import condense_helper as ch
 
 
